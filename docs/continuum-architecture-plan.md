@@ -24,7 +24,7 @@ Continuum은 사용자의 맥락이 끊기지 않고 흐르는 하나의 연속�
 
 ## 2. 제품 가치
 
-Continuum의 핵심 가치는 세 가지다.
+Continuum의 핵심 가치는 네 가지다.
 
 1. **Capture observable context with provenance**
    - Slack, Plaud, Mail, Calendar, Reminder, 브라우저, 세션, 파일, 직접 입력 등 접근 가능한 source에서 관측 가능한 맥락을 수집한다.
@@ -40,6 +40,11 @@ Continuum의 핵심 가치는 세 가지다.
    - 맥락은 특정 agent의 memory가 아니라 사용자 소유의 중립 core에 남는다.
    - Hermes, Claude Code, Codex, Gemini, local scripts, MCP server, custom agent가 모두 같은 CLI/DB 기반 SSOT에 붙을 수 있다.
    - agent가 바뀌어도 맥락, 처리 상태, lineage, 신뢰도 평가는 유지된다.
+
+4. **Improve user-visible outcomes**
+   - Continuum은 process state만 잘 남기는 시스템이 아니라, workflow가 실제로 더 좋은 결과물을 만들도록 돕는 context substrate다.
+   - draft/report/proposal/code output은 사용자가 체감하는 품질 지표를 가져야 한다.
+   - 예: draft accepted rate, edit distance/draft delta, unedited send rate, time-to-draft, report useful item count, false-positive/false-negative feedback.
 
 ---
 
@@ -133,6 +138,26 @@ Continuum은 기능보다 먼저 지켜야 할 철학이 있다. 이후 설계/�
     - 충분히 검증된 낮은 위험 작업만 trusted rule로 승격한다.
     - 위험도가 높은 작업일수록 더 명시적인 승인과 더 강한 lineage가 필요하다.
 
+14. **Outcome-measured workflows**
+    - `processed/skipped/failed`는 process guarantee이지 사용자 가치의 전부가 아니다.
+    - draft/report/proposal/code workflow는 사용자가 실제로 더 적게 고치고, 더 빨리 승인하고, 더 자주 활용하는지를 측정해야 한다.
+    - core는 특정 metric을 강제하지 않지만, output feedback과 outcome metrics를 기록할 추상화는 제공한다.
+
+15. **Context bundle as first-class input**
+    - 좋은 output은 좋은 context selection에서 나온다.
+    - workflow가 segment를 직접 흩어 읽는 대신, 목적별로 curated된 context bundle을 만들고 그 bundle을 근거로 output을 생성할 수 있어야 한다.
+    - context bundle은 lineage 이전 단계의 “입력 패키지”이며, 어떤 segment/artifact/trust note를 포함했는지 추적 가능해야 한다.
+
+16. **Portable workflow packages**
+    - workflow 정의는 특정 host나 agent prompt에 갇히지 않아야 한다.
+    - Hermes, Claude Code, Codex, MCP client, local cron이 같은 workflow contract를 읽을 수 있어야 한다.
+    - workflow package는 input contract, output contract, required capabilities, safety policy, guide를 포함한다.
+
+17. **MCP-first integration surface, CLI-also**
+    - CLI는 local-first 운영과 디버깅의 기본 surface다.
+    - MCP는 agent/host가 Continuum을 표준 protocol로 쓰기 위한 1급 통합 채널이다.
+    - v1은 CLI를 먼저 구현하되, API boundary는 MCP server로 노출하기 쉽게 설계한다.
+
 ### 2.5.2 철학 위배 검증 체크리스트
 
 새 기능/스키마/worker를 추가할 때마다 아래 질문에 답한다.
@@ -150,6 +175,10 @@ Continuum은 기능보다 먼저 지켜야 할 철학이 있다. 이후 설계/�
 | core에 source/workflow별 특수 정책이 계속 들어오는가? | core 비대화 |
 | 외부 side effect가 승인 없이 실행되는가? | human approval 위반 |
 | 자동화 수준을 검증 없이 바로 execute로 올리는가? | progressive automation 위반 |
+| output 품질/사용자 편집량/승인 여부를 측정하지 않는가? | outcome metric 부재 |
+| workflow가 context bundle 없이 임의로 segment를 흩어 읽는가? | context packaging 부재 |
+| workflow 정의가 특정 agent/host prompt에 갇혀 있는가? | portability 위반 |
+| Continuum 기능이 CLI로만 가능하고 MCP surface로 노출 불가능한가? | MCP 통합성 부족 |
 | 운영자가 CLI/파일/DB로 상태를 점검할 수 없는가? | inspectability 위반 |
 | 같은 입력 재실행 시 중복/오염이 생기는가? | idempotency 위반 |
 | 민감 정보가 기본 허용으로 흐르는가? | privacy 위반 |
@@ -317,8 +346,12 @@ Outputs
 | `artifact` | 원본/파생 파일 | transcript.txt, raw.json, audio.mp3 |
 | `segment` | workflow가 읽는 최소 처리 단위 | summary, transcript chunk, message |
 | `workflow` | segment를 소비하는 사용처 | daily_report, morning_report |
+| `workflow_package` | host-agnostic workflow spec | input/output contract, safety policy, guide |
 | `run` | collector/normalizer/workflow 실행 1회 | daily_report 2026-06-15 실행 |
+| `context_bundle` | output 생성을 위한 curated input package | draft reply용 관련 segment 묶음 |
 | `output` | run이 만든 산출물 | report.html, todo proposal, draft |
+| `output_feedback` | output에 대한 사용자/시스템 반응 | accepted, edited, useful |
+| `output_metric` | output 품질/활용 지표 | draft_delta, unedited_send_rate |
 | `lineage` | output의 근거 segment 연결 | report가 읽은 segment 목록 |
 | `draft` | 승인/수정/실행 lifecycle이 있는 초안 | 답장 초안, HTML 초안, 코드 초안 |
 
@@ -507,7 +540,37 @@ CREATE TABLE workflows (
 
 ---
 
-### 6.7 Workflow state
+### 6.7 Workflow packages
+
+Workflow package는 host-agnostic workflow 정의다.
+
+`workflows` table이 runtime 등록 상태라면, workflow package는 Hermes/Claude Code/Codex/MCP/local cron이 공유할 수 있는 portable spec이다.
+
+```sql
+CREATE TABLE workflow_packages (
+  id INTEGER PRIMARY KEY,
+  key TEXT NOT NULL UNIQUE,
+  version TEXT NOT NULL,
+  package_path TEXT NOT NULL,
+  input_contract_json TEXT NOT NULL,
+  output_contract_json TEXT NOT NULL,
+  required_capabilities_json TEXT,
+  safety_policy_json TEXT,
+  guide_path TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+규칙:
+
+- package는 특정 agent prompt가 아니라 host-agnostic spec이어야 한다.
+- host별 adapter는 package를 읽어 자기 실행 방식으로 변환할 수 있다.
+- package에는 “무슨 context bundle을 입력으로 받고, 어떤 output을 만들며, 어떤 side effect 권한이 필요한지”가 명시되어야 한다.
+
+---
+
+### 6.8 Workflow state
 
 각 workflow가 각 segment를 어떻게 처리했는지 기록한다.
 
@@ -538,7 +601,7 @@ not_relevant | sensitive | superseded | low_confidence | out_of_scope | duplicat
 
 ---
 
-### 6.8 Runs
+### 6.9 Runs
 
 collector와 workflow 실행 이력을 모두 run으로 남긴다.
 
@@ -572,7 +635,7 @@ workflow daily_report + 2026-06-15 + 입력 segment hash
 
 ---
 
-### 6.9 Run inputs
+### 6.10 Run inputs
 
 `run`은 특정 stream의 자식이 아니다.
 
@@ -608,7 +671,49 @@ workflow daily_report run
 
 ---
 
-### 6.10 Lineage
+### 6.11 Context bundles
+
+Context bundle은 workflow가 output을 만들기 전에 사용하는 **curated input package**다.
+
+Lineage가 “output이 무엇을 근거로 만들어졌는가”를 사후 추적한다면, context bundle은 “output 생성을 위해 어떤 맥락을 의도적으로 포장했는가”를 사전에 기록한다.
+
+```sql
+CREATE TABLE context_bundles (
+  id INTEGER PRIMARY KEY,
+  workflow_id INTEGER,
+  run_id INTEGER,
+  purpose TEXT NOT NULL, -- draft_reply | daily_report | todo_plan | gbrain_fanout | code_change
+  title TEXT,
+  selection_policy TEXT, -- deterministic | agent | hybrid
+  trust_policy_json TEXT,
+  sensitivity_policy_json TEXT,
+  created_at TEXT NOT NULL,
+  metadata_json TEXT
+);
+```
+
+```sql
+CREATE TABLE context_bundle_entries (
+  bundle_id INTEGER NOT NULL,
+  entry_type TEXT NOT NULL, -- segment | artifact | output | actor | trust_assessment | conflict
+  entry_id INTEGER NOT NULL,
+  role TEXT, -- primary | supporting | counter_evidence | background | excluded_reason
+  rank INTEGER,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(bundle_id, entry_type, entry_id, role)
+);
+```
+
+규칙:
+
+- workflow는 raw DB를 임의로 긁기보다 context bundle을 입력으로 받는 것을 권장한다.
+- bundle은 output 품질을 높이기 위한 context selection 단위다.
+- bundle entry에는 신뢰도와 민감도 정책이 반영되어야 한다.
+- output이 생성되면 `lineage`는 bundle에 포함된 핵심 segment와 output을 연결한다.
+
+---
+
+### 6.12 Lineage
 
 결과물이 어떤 segment에서 나왔는지 기록한다.
 
@@ -625,7 +730,7 @@ CREATE TABLE lineage (
 
 ---
 
-### 6.11 Schema migrations
+### 6.13 Schema migrations
 
 Phase가 진행될수록 스키마가 바뀌므로 migration 기록은 v1 필수다.
 
@@ -639,7 +744,7 @@ CREATE TABLE schema_migrations (
 
 ---
 
-### 6.12 Routing audit view
+### 6.14 Routing audit view
 
 routing되지 않은 segment를 감지하기 위한 view를 둔다.
 
@@ -657,7 +762,7 @@ WHERE NOT EXISTS (
 
 ---
 
-### 6.13 Outputs
+### 6.15 Outputs
 
 derived 결과물은 기본적으로 다시 workflow 입력으로 쓰지 않는다.
 
@@ -665,6 +770,7 @@ derived 결과물은 기본적으로 다시 workflow 입력으로 쓰지 않는�
 CREATE TABLE outputs (
   id INTEGER PRIMARY KEY,
   run_id INTEGER NOT NULL,
+  context_bundle_id INTEGER,
   output_kind TEXT NOT NULL, -- report | diary | todo_proposal | calendar_proposal | gbrain_update | draft
   output_ref TEXT NOT NULL,
   path TEXT,
@@ -673,9 +779,36 @@ CREATE TABLE outputs (
 );
 ```
 
+Output에는 사용자 체감 품질을 측정하기 위한 feedback/metric을 붙일 수 있다.
+
+```sql
+CREATE TABLE output_feedback (
+  id INTEGER PRIMARY KEY,
+  output_id INTEGER NOT NULL,
+  feedback_type TEXT NOT NULL, -- accepted | rejected | edited | sent_unedited | useful | not_useful
+  value TEXT,
+  actor TEXT, -- user | workflow | external_system
+  created_at TEXT NOT NULL,
+  metadata_json TEXT
+);
+```
+
+```sql
+CREATE TABLE output_metrics (
+  id INTEGER PRIMARY KEY,
+  output_id INTEGER NOT NULL,
+  metric_key TEXT NOT NULL, -- draft_delta | time_to_approve | unedited_send | useful_item_count
+  metric_value REAL,
+  unit TEXT,
+  measured_at TEXT NOT NULL,
+  metadata_json TEXT,
+  UNIQUE(output_id, metric_key)
+);
+```
+
 ---
 
-### 6.14 Drafts
+### 6.16 Drafts
 
 Todo/action 후보가 나온 뒤에는 그에 대한 초안도 관리해야 한다. 초안은 단순 텍스트가 아닐 수 있다.
 
@@ -725,7 +858,7 @@ CREATE TABLE draft_versions (
 
 ---
 
-### 6.15 Item sync state
+### 6.17 Item sync state
 
 일부 source item은 시간이 지나며 child/update/version이 추가되는 aggregate다.
 
@@ -789,7 +922,7 @@ Calendar event
 
 ---
 
-### 6.16 Source actors
+### 6.18 Source actors
 
 Provenance-first 원칙상 “어느 소스에서 왔는가”뿐 아니라 “어떤 사람/계정이 관련됐는가”도 추적해야 한다.
 
@@ -830,7 +963,7 @@ CREATE TABLE item_actor_links (
 
 ---
 
-### 6.17 Evidence trust
+### 6.19 Evidence trust
 
 Provenance-first는 단순히 “출처를 남긴다”가 아니라, **근거의 신뢰도와 충돌 관계를 관리한다**는 뜻이다.
 
@@ -1143,6 +1276,29 @@ continuum drafts execute <draft_id>   # code draft 등 명시 승인 후 실행
 ```
 
 초안 실행은 기본적으로 위험한 side effect이므로 v1에서는 `approve`와 별도 `execute`를 분리한다.
+
+### 9.8 MCP interface
+
+MCP는 Continuum을 agent/host가 표준 protocol로 쓰기 위한 1급 integration surface다.
+
+v1은 CLI를 먼저 구현하되, 아래 기능은 MCP tool로 그대로 노출 가능한 boundary를 유지한다.
+
+| MCP tool 후보 | 대응 CLI | 용도 |
+|---|---|---|
+| `continuum_search_segments` | `continuum segments ...` | workflow/agent가 context 검색 |
+| `continuum_get_context_bundle` | `continuum bundles show` | curated context bundle 조회 |
+| `continuum_create_context_bundle` | `continuum bundles create` | 목적별 context packaging |
+| `continuum_list_pending` | `continuum workflows pending` | workflow queue 조회 |
+| `continuum_submit_output` | `continuum outputs create` | agent/worker output 제출 |
+| `continuum_submit_draft` | `continuum drafts create` | draft 제출 |
+| `continuum_record_feedback` | `continuum outputs feedback` | outcome feedback 기록 |
+| `continuum_get_lineage` | `continuum lineage ...` | 근거 추적 |
+
+원칙:
+
+- MCP tool은 CLI subprocess wrapper가 아니라 core service boundary를 공유한다.
+- CLI와 MCP는 같은 Python service/domain layer를 호출한다.
+- MCP는 외부 host가 Continuum을 읽고 쓰는 표준 surface지만, local debugging과 cron 운영을 위해 CLI도 동등하게 유지한다.
 
 ---
 
@@ -1533,11 +1689,23 @@ v1 성공 기준:
 4. 어떤 report가 어떤 source segment를 읽었는지 lineage로 추적된다.
 5. 새 source가 추가되어도 DB 모델을 크게 바꾸지 않는다.
 6. Hermes 외부 agent도 CLI로 context를 읽고 output/draft를 제출할 수 있다.
+7. workflow output에 대한 최소 feedback/metric을 기록할 수 있다.
 
 v1.5 성공 기준:
 
 1. action/todo 후보에서 생성된 초안이 `drafts`로 저장되고 승인/폐기/수정 이력이 남는다.
 2. diary/todo_planner/gbrain_fanout이 candidate segment 기반으로 동작한다.
+3. draft/report/proposal output이 context bundle을 입력으로 사용하고, bundle → output → lineage가 추적된다.
+4. MCP server가 주요 read/write surface를 제공한다.
+
+Outcome metric 예:
+
+| Output | Metric |
+|---|---|
+| draft | accepted rate, rejected rate, edit distance/draft delta, unedited send rate |
+| report | useful item count, dismissed item count, missing item feedback |
+| todo/calendar proposal | approved rate, modified-before-approval rate, time-to-approval |
+| code draft | executed rate, test pass rate, user edit delta |
 
 ---
 
@@ -1576,6 +1744,9 @@ erDiagram
     RUNS ||--o{ WORKFLOW_SEGMENT_STATE : last_updated_by
 
     RUNS ||--o{ RUN_INPUTS : declares_inputs
+    WORKFLOWS ||--o{ WORKFLOW_PACKAGES : may_use_package
+    WORKFLOWS ||--o{ CONTEXT_BUNDLES : builds
+    CONTEXT_BUNDLES ||--o{ CONTEXT_BUNDLE_ENTRIES : contains
     STREAMS ||--o{ RUN_INPUTS : may_be_input
     ITEMS ||--o{ RUN_INPUTS : may_be_input
     ARTIFACTS ||--o{ RUN_INPUTS : may_be_input
@@ -1583,6 +1754,9 @@ erDiagram
     WORKFLOWS ||--o{ RUN_INPUTS : may_be_input
 
     RUNS ||--o{ OUTPUTS : creates
+    CONTEXT_BUNDLES ||--o{ OUTPUTS : packages_input_for
+    OUTPUTS ||--o{ OUTPUT_FEEDBACK : receives
+    OUTPUTS ||--o{ OUTPUT_METRICS : measures
     OUTPUTS ||--o{ LINEAGE : cites
     SEGMENTS ||--o{ LINEAGE : supports
 
@@ -1728,6 +1902,20 @@ erDiagram
       text updated_at
     }
 
+    WORKFLOW_PACKAGES {
+      integer id PK
+      text key UK
+      text version
+      text package_path
+      text input_contract_json
+      text output_contract_json
+      text required_capabilities_json
+      text safety_policy_json
+      text guide_path
+      text created_at
+      text updated_at
+    }
+
     WORKFLOW_SEGMENT_STATE {
       integer workflow_id PK,FK
       integer segment_id PK,FK
@@ -1764,13 +1952,56 @@ erDiagram
       text created_at
     }
 
+    CONTEXT_BUNDLES {
+      integer id PK
+      integer workflow_id FK
+      integer run_id FK
+      text purpose
+      text title
+      text selection_policy
+      text trust_policy_json
+      text sensitivity_policy_json
+      text created_at
+      text metadata_json
+    }
+
+    CONTEXT_BUNDLE_ENTRIES {
+      integer bundle_id PK,FK
+      text entry_type PK
+      integer entry_id PK
+      text role PK
+      integer rank
+      text created_at
+    }
+
     OUTPUTS {
       integer id PK
       integer run_id FK
+      integer context_bundle_id FK
       text output_kind
       text output_ref
       text path
       text created_at
+      text metadata_json
+    }
+
+    OUTPUT_FEEDBACK {
+      integer id PK
+      integer output_id FK
+      text feedback_type
+      text value
+      text actor
+      text created_at
+      text metadata_json
+    }
+
+    OUTPUT_METRICS {
+      integer id PK
+      integer output_id FK
+      text metric_key
+      real metric_value
+      text unit
+      text measured_at
       text metadata_json
     }
 
@@ -1826,10 +2057,15 @@ erDiagram
 | `artifacts` | 저장 파일 | 본문/녹음/JSON/transcript 같은 실제 파일 |
 | `segments` | 처리 조각 | workflow가 읽기 좋은 최소 단위 |
 | `workflows` | 사용처 | daily report, morning report처럼 segment를 소비하는 목적 |
+| `workflow_packages` | portable workflow spec | host-agnostic input/output/safety/guide package |
 | `workflow_segment_state` | workflow별 처리 상태 | 어떤 workflow가 어떤 segment를 처리/스킵/실패했는지 |
 | `runs` | 실행 기록 | collect/normalize/workflow 실행 1회 |
 | `run_inputs` | 실행 입력 | run이 어떤 stream/item/artifact/segment를 입력으로 받았는지 |
+| `context_bundles` | 컨텍스트 묶음 | output 생성을 위해 선별한 segment/artifact/trust 묶음 |
+| `context_bundle_entries` | bundle 구성원 | bundle에 포함된 segment/artifact/output/actor 등 |
 | `outputs` | 산출물 | report, proposal, draft 등 run이 만든 결과 |
+| `output_feedback` | 산출물 반응 | accepted/rejected/edited/useful 같은 사용자 반응 |
+| `output_metrics` | 산출물 지표 | draft_delta, time_to_approve, useful_item_count |
 | `lineage` | 산출물 근거 | output이 어떤 segment에 근거했는지 |
 | `drafts` | 초안 상태 | 답장/문서/코드 초안의 승인/폐기/실행 상태 |
 | `draft_versions` | 초안 내용 버전 | 초안 본문의 immutable version들 |
@@ -1957,10 +2193,15 @@ Continuum은 모든 테이블을 append-only로 만들지는 않는다. 대신 *
 | `artifacts` | Immutable | 파일은 근거/재처리 원본이므로 덮어쓰면 안 됨 | 내용 변경 시 새 artifact row + 새 파일 |
 | `segments` | Immutable | workflow state와 lineage의 기준점 | 내용 변경 시 새 segment, 기존 segment는 superseded 연결 |
 | `workflows` | Mutable metadata | workflow 설정/표시명은 바뀔 수 있음 | key는 고정, mode/metadata/policy update |
+| `workflow_packages` | Immutable versioned spec | host-agnostic workflow spec은 버전 단위로 고정 | 변경 시 새 version/package |
 | `workflow_segment_state` | Mutable state | queue와 처리 상태이므로 변해야 함 | pending → processed/skipped/failed update |
 | `runs` | Append-only record | 실행 1회는 감사 로그 | row 생성 후 status/finished_at/error만 completion update |
 | `run_inputs` | Append-only | run의 입력 근거 | run 생성 시 insert, 이후 수정 금지 |
+| `context_bundles` | Immutable input package | output 생성 입력 패키지는 재현 근거 | 변경 시 새 bundle 생성 |
+| `context_bundle_entries` | Append-only bundle content | bundle 구성 근거 | bundle 생성 시 insert, 이후 수정 금지 |
 | `outputs` | Immutable record | 결과물은 실행 산출물의 스냅샷 | 수정 대신 새 output 생성 |
+| `output_feedback` | Append-only event | 사용자/시스템 반응 이력 | feedback 발생 시 insert |
+| `output_metrics` | Replaceable measurement | 같은 metric 재계산 가능 | metric_key 단위 upsert 허용 |
 | `lineage` | Append-only | output 근거는 감사 정보 | insert만 허용, 잘못된 lineage는 새 output으로 정정 |
 | `drafts` | Mutable state | 초안의 승인/폐기/실행 상태 | status/updated_at update |
 | `draft_versions` | Append-only + immutable | 초안 내용 버전 이력 | 수정 시 새 version insert |
