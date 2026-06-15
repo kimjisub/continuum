@@ -29,6 +29,97 @@
 
 - `cursor`는 **수집 위치**이고, `workflow_segment_state`는 **처리 상태**다.
 - `run`은 특정 stream의 자식이 아니다. collect run은 여러 stream을, workflow run은 여러 segment를 입력으로 받을 수 있다. 그래서 `run_inputs`로 입력을 따로 연결한다.
+- 외부 시스템은 source이면서 write target일 수 있다. 읽어온 객체는 `item/segment`, 쓰려고 만든 것은 `output/draft/proposal`, 실행 결과는 다음 collect에서 다시 `item/segment`로 reconcile한다.
+
+#### 6.0.1 Source shape와 sync behavior
+
+Source별 전용 모델을 먼저 만들지 않는다. source item의 **primary shape**와 **sync behavior**를 분리한다.
+
+Shape는 source item의 “주된 의미” 기준으로 하나만 선택한다. 시간이 지나며 child가 추가되는지, 수정되는지, version이 생기는지는 shape가 아니라 `sync_behavior`로 표현한다.
+
+| Shape | 정의 | 예시 | 기본 처리 |
+|---|---|---|---|
+| `append_entry` | 시간순 stream에 추가되는 독립 entry | Slack channel message, Discord message, Telegram message, log line, webhook event | stream cursor + item/segment 생성 |
+| `conversation` | 하나의 대화/논의 단위. root와 replies/participants를 가질 수 있음 | Slack thread, Discord thread, Telegram topic, Gmail thread, GitHub issue discussion, Linear issue comments | aggregate item + child sync + summary segment |
+| `recording` | 음성/영상처럼 transcript/extraction이 필요한 media record | Plaud recording, Zoom recording, Teams recording, voice memo, call recording | artifact 저장 + transcript/summary segment |
+| `scheduled_event` | 시작/종료 시간과 참석자가 있는 일정/회의 객체 | Calendar event, meeting invite, interview schedule, webinar, reservation | time fields + attendees + update sync |
+| `task` | 완료/기한/우선순위/상태 전이가 있는 actionable object | Apple Reminder, todo, Linear issue, GitHub issue, Jira ticket, Asana task | state tracking + due/status segment |
+| `document` | 사람이 읽는 본문 중심 문서 | PDF, Google Doc, Notion page, Markdown note, proposal doc, email attachment doc | artifact + body/summary segments + version/hash |
+| `dataset` | row/record 집합 또는 structured data dump | CSV, spreadsheet, Airtable export, JSONL, database query result | artifact + schema/profile/row summary segments |
+| `snapshot` | 특정 시점의 관측 상태. 그 자체가 처리 단위라기보다 상태 사진 | unread inbox listing, Slack channel list, file tree, system status, search result page | artifact 저장 + 필요 시 source_health/summary segment |
+| `external_reference` | 원문은 외부에 있고 Continuum에는 포인터/metadata만 있는 객체 | URL bookmark, GitHub PR link, Linear project link, Drive file pointer, web article URL | metadata + fetch/resolve 상태 관리 |
+
+`report`, `diary`, `GBrain update`, `todo proposal`, `draft` 같은 산출물은 source shape가 아니라 **output**으로 관리한다.
+
+예:
+
+| Source object | Shape | sync_behavior 예 |
+|---|---|---|
+| Slack channel message | `append_entry` | append-only + watermark |
+| Slack thread | `conversation` | children_grow |
+| Gmail thread | `conversation` | children_grow |
+| Calendar event | `scheduled_event` | mutable_record |
+| Reminder/todo item | `task` | mutable_record |
+| Plaud recording | `recording` | extraction_pending |
+| Google Doc | `document` | versioned |
+| CSV export | `dataset` | replace_snapshot 또는 versioned |
+| Slack unread list | `snapshot` | point_in_time |
+
+같은 shape라도 동기화 방식은 다를 수 있다. 반대로 다른 shape라도 같은 sync behavior를 공유할 수 있다.
+
+| Sync behavior | 의미 | 예시 | 상태 저장 |
+|---|---|---|---|
+| `append_only` | 새 entry가 뒤에만 붙음 | channel timeline, log stream | `stream_cursors` |
+| `watermarked_append` | 늦게 도착한 entry를 잡기 위해 최근 구간 재스캔 | Slack/Discord channel | `stream_cursors` + watermark |
+| `children_grow` | 기존 item 아래 child/reply/comment가 추가됨 | Slack thread, Gmail thread, GitHub issue comments | `item_sync_state` |
+| `mutable_record` | 같은 외부 id의 필드가 바뀜 | calendar event time change, task status change | item update + 새 segment/supersede |
+| `versioned` | 새 버전이 생김 | Google Doc revision, PDF update, code file snapshot | artifact/segment 새 버전 |
+| `replace_snapshot` | 매번 전체 상태 사진을 다시 찍음 | inbox listing, channel list, search results | snapshot artifact |
+| `extraction_pending` | 원본 수집 후 transcript/OCR/parse가 뒤따름 | Plaud, PDF OCR, meeting recording | artifact + normalize run |
+
+```text
+Slack thread = conversation + children_grow
+Gmail thread = conversation + children_grow
+GitHub issue discussion = conversation + children_grow
+Calendar event = scheduled_event + mutable_record
+Reminder todo = task + mutable_record
+Google Doc = document + versioned
+Plaud recording = recording + extraction_pending
+```
+
+#### 6.0.2 Source이면서 write target인 시스템
+
+Todo list, Calendar, GBrain, Slack, Mail처럼 Continuum이 읽기도 하고 쓰기도 하는 시스템은 **read path**와 **write path**를 분리한다.
+
+```text
+Read path:
+external system → connector → stream/item/artifact/segment → workflow
+
+Write path:
+workflow → output/draft/proposal → approval → external write → collect/reconcile → item/segment
+```
+
+규칙:
+
+- 외부 시스템에 이미 존재하는 객체는 source `item`이다.
+- Continuum이 만들고 싶은 변경은 먼저 `output`, `draft`, 또는 proposal 성격의 segment/output이다.
+- 외부 write는 승인 가능한 side effect다. write 성공 응답만으로 source truth를 확정하지 않는다.
+- 다음 collect에서 외부 시스템의 실제 객체를 다시 읽고, `external_id`로 기존 proposal/output과 reconcile한다.
+- lineage는 “어떤 output이 어떤 external item을 만들었거나 수정했는지”를 연결해야 한다.
+
+예: Todo 생성
+
+```text
+action_candidate segment
+  → todo proposal output/draft
+  → user approves
+  → Reminders write executes
+  → Reminders collector sees external_id
+  → task item/segment is created or updated
+  → lineage links proposal output ↔ created task item
+```
+
+이 모델을 쓰면 todo list가 source이면서 sink여도 충돌하지 않는다. Source 상태는 외부 시스템에서 확인된 사실이고, output/draft는 Continuum이 제안하거나 실행한 의도다.
 
 #### 6.1 Streams
 

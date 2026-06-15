@@ -128,84 +128,62 @@ Continuum은 처음부터 분산 orchestration이나 외부 queue를 전제로 �
 
 #### 3.1 데이터 모델링 원칙
 
+00 문서에서는 data shape, sync behavior, table 설계의 세부 목록을 다루지 않는다. 세부 분류와 스키마는 [Data Model](02-data-model.md)에 둔다. 여기에는 설계 판단을 좌우하는 원칙만 남긴다.
+
 ##### 3.1.1 Source 이름보다 data shape을 먼저 본다
 
-“Slack 전용”, “Plaud 전용” 모델을 만들지 않는다. 대신 source item의 **primary shape**와 **sync behavior**를 분리해 추상화한다.
+“Slack 전용”, “Plaud 전용”, “Reminder 전용” 모델을 먼저 만들지 않는다. 외부 객체가 어떤 형태의 데이터인지, 어떻게 동기화되는지, workflow가 어떤 단위로 읽어야 하는지를 먼저 본다.
 
-###### Shape는 MECE하게 정의한다
+핵심 질문:
 
-Shape는 source item의 “주된 의미” 기준으로 하나만 선택한다. 시간이 지나며 child가 추가되는지, 수정되는지, version이 생기는지는 shape가 아니라 `sync_behavior`로 표현한다.
+- 이 객체는 stream entry인가, conversation인가, task인가, document인가, snapshot인가?
+- 새로 append되는가, child가 자라는가, 같은 record가 수정되는가, 버전이 생기는가?
+- workflow가 읽어야 하는 최소 단위는 item인가, artifact인가, segment인가?
 
-| Shape | 정의 | 예시 | 기본 처리 |
-|---|---|---|---|
-| `append_entry` | 시간순 stream에 추가되는 독립 entry | Slack channel message, Discord message, Telegram message, log line, webhook event | stream cursor + item/segment 생성 |
-| `conversation` | 하나의 대화/논의 단위. root와 replies/participants를 가질 수 있음 | Slack thread, Discord thread, Telegram topic, Gmail thread, GitHub issue discussion, Linear issue comments | aggregate item + child sync + summary segment |
-| `recording` | 음성/영상처럼 transcript/extraction이 필요한 media record | Plaud recording, Zoom recording, Teams recording, voice memo, call recording | artifact 저장 + transcript/summary segment |
-| `scheduled_event` | 시작/종료 시간과 참석자가 있는 일정/회의 객체 | Calendar event, meeting invite, interview schedule, webinar, reservation | time fields + attendees + update sync |
-| `task` | 완료/기한/우선순위/상태 전이가 있는 actionable object | Apple Reminder, todo, Linear issue, GitHub issue, Jira ticket, Asana task | state tracking + due/status segment |
-| `document` | 사람이 읽는 본문 중심 문서 | PDF, Google Doc, Notion page, Markdown note, proposal doc, email attachment doc | artifact + body/summary segments + version/hash |
-| `dataset` | row/record 집합 또는 structured data dump | CSV, spreadsheet, Airtable export, JSONL, database query result | artifact + schema/profile/row summary segments |
-| `snapshot` | 특정 시점의 관측 상태. 그 자체가 처리 단위라기보다 상태 사진 | unread inbox listing, Slack channel list, file tree, system status, search result page | artifact 저장 + 필요 시 source_health/summary segment |
-| `external_reference` | 원문은 외부에 있고 Continuum에는 포인터/metadata만 있는 객체 | URL bookmark, GitHub PR link, Linear project link, Drive file pointer, web article URL | metadata + fetch/resolve 상태 관리 |
+##### 3.1.2 읽기 모델과 쓰기 모델을 분리한다
 
-`report`, `diary`, `GBrain update`, `todo proposal`, `draft` 같은 산출물은 source shape가 아니라 **output**으로 관리한다.
+같은 외부 시스템이 **source**이면서 동시에 **write target**일 수 있다. Todo list, Calendar, GBrain, Slack, Mail이 모두 그렇다.
+
+원칙:
+
+- 외부 시스템에서 이미 존재하는 객체를 읽어온 것은 `source item/segment`다.
+- Continuum이 외부 시스템에 쓰려고 만든 것은 먼저 `proposal/draft/output`이다.
+- 실제 write/execute는 승인 가능한 side effect로 다루고, 실행 결과는 다시 source 수집을 통해 `item/segment`로 reconcile한다.
+- 즉 “내가 만들 todo”와 “실제로 Reminders에 존재하는 todo”를 같은 것으로 착각하지 않는다.
 
 예:
 
-| Source object | Shape | sync_behavior 예 |
-|---|---|---|
-| Slack channel message | `append_entry` | append-only + watermark |
-| Slack thread | `conversation` | children_grow |
-| Gmail thread | `conversation` | children_grow |
-| Calendar event | `scheduled_event` | mutable_record |
-| Plaud recording | `recording` | extraction_pending |
-| Google Doc | `document` | versioned |
-| CSV export | `dataset` | replace_snapshot 또는 versioned |
-| Slack unread list | `snapshot` | point_in_time |
-
-###### Sync behavior는 shape와 분리한다
-
-같은 shape라도 동기화 방식은 다를 수 있다. 반대로 다른 shape라도 같은 sync behavior를 공유할 수 있다.
-
-| Sync behavior | 의미 | 예시 | 상태 저장 |
-|---|---|---|---|
-| `append_only` | 새 entry가 뒤에만 붙음 | channel timeline, log stream | `stream_cursors` |
-| `watermarked_append` | 늦게 도착한 entry를 잡기 위해 최근 구간 재스캔 | Slack/Discord channel | `stream_cursors` + watermark |
-| `children_grow` | 기존 item 아래 child/reply/comment가 추가됨 | Slack thread, Gmail thread, GitHub issue comments | `item_sync_state` |
-| `mutable_record` | 같은 외부 id의 필드가 바뀜 | calendar event time change, task status change | item update + 새 segment/supersede |
-| `versioned` | 새 버전이 생김 | Google Doc revision, PDF update, code file snapshot | artifact/segment 새 버전 |
-| `replace_snapshot` | 매번 전체 상태 사진을 다시 찍음 | inbox listing, channel list, search results | snapshot artifact |
-| `extraction_pending` | 원본 수집 후 transcript/OCR/parse가 뒤따름 | Plaud, PDF OCR, meeting recording | artifact + normalize run |
-
-이렇게 나누면 Slack thread는 Slack 전용 모델이 아니라 `conversation + children_grow`의 한 예시가 된다.
-
 ```text
-Slack thread = conversation + children_grow
-Gmail thread = conversation + children_grow
-GitHub issue discussion = conversation + children_grow
-Calendar event = scheduled_event + mutable_record
-Google Doc = document + versioned
-Plaud recording = recording + extraction_pending
+Reminder existing task
+  → source item/segment
+
+Todo proposal generated by Continuum
+  → output/draft/proposal
+  → user approval
+  → external write to Reminders
+  → next collect reconciles created reminder as source item
+  → lineage links proposal/output to created source item
 ```
 
+이렇게 해야 output 재순환, 중복 todo 생성, 외부 시스템과 Continuum DB의 상태 불일치를 줄일 수 있다.
 
-
-##### 3.1.2 원본/근거는 immutable, 상태는 mutable로 분리한다
+##### 3.1.3 원본/근거는 immutable, 상태는 mutable로 분리한다
 
 - artifact/segment/output/lineage는 덮어쓰지 않는다.
 - cursor/workflow state/draft status처럼 현재 상태를 나타내는 값만 update한다.
 - 수정/재생성은 새 row와 supersede/version으로 표현한다.
 
-##### 3.1.3 출처, 신뢰도, 민감도는 처음부터 함께 저장한다
+##### 3.1.4 출처, 신뢰도, 민감도는 처음부터 함께 저장한다
 
 - provenance는 나중에 붙이는 설명이 아니라 데이터의 일부다.
 - sensitivity는 LLM 판단 이전 ingest 시점에 보수적으로 부여한다.
 - trust와 sensitivity는 분리한다. 믿을 만한 정보라도 민감할 수 있고, 공개 정보라도 신뢰도가 낮을 수 있다.
 
-##### 3.1.4 derived output은 기본적으로 다시 routing input이 아니다
+##### 3.1.5 derived output은 기본적으로 다시 routing input이 아니다
 
 - report/diary/todo proposal이 다시 입력으로 순환하면 맥락 오염과 중복 판단이 생긴다.
 - output을 재입력으로 쓰려면 명시적 workflow rule과 lineage가 필요하다.
+- 외부 write 결과는 output 자체가 아니라, 다음 수집에서 확인된 source item으로 다시 들어와야 한다.
 
 #### 3.2 처리/운영 원칙
 
