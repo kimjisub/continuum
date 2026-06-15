@@ -12,7 +12,7 @@ The original long architecture plan is split into ordered planning documents.
 | 05 | [Source Sync and Ingest](05-source-sync-and-ingest.md) | Slack/append-stream handling, polling, push, trigger policy |
 | 06 | [Runtime, CLI, and MCP](06-runtime-cli-mcp.md) | Install/onboarding model, daemon model, CLI and MCP surfaces |
 | 07 | [Use Cases and Guarantees](07-use-cases-and-guarantees.md) | Daily/morning report, diary, todo/calendar, GBrain, guarantees/non-guarantees |
-| 08 | [Implementation, Scope, and Success Criteria](08-implementation-scope-and-success.md) | Phases, non-goals, success criteria, final summary |
+| 08 | [Implementation, Scope, and Success Criteria](08-implementation-scope-and-success.md) | Required implementation phases, core non-responsibilities, success criteria, final summary |
 | 09 | [ERD](09-erd.md) | Mermaid entity relationship diagram |
 | 10 | [Entity Reference and Mutability](10-entity-reference-and-mutability.md) | Entity explanations, naming, mutability rules |
 

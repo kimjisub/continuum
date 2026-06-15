@@ -20,7 +20,7 @@
 | `segments` | 처리 조각 | workflow가 읽기 좋은 최소 단위 |
 | `workflows` | 사용처 | daily report, morning report처럼 segment를 소비하는 목적 |
 | `workflow_packages` | portable workflow spec | host-agnostic input/output/safety/guide package |
-| `workflow_segment_state` | workflow별 처리 상태 | 어떤 workflow가 어떤 segment를 처리/스킵/실패했는지 |
+| `workflow_segment_state` | workflow별 처리 상태 | 어떤 workflow가 어떤 segment를 claim/처리/스킵/실패했는지 |
 | `runs` | 실행 기록 | collect/normalize/workflow 실행 1회 |
 | `run_inputs` | 실행 입력 | run이 어떤 stream/item/artifact/segment를 입력으로 받았는지 |
 | `context_bundles` | 컨텍스트 묶음 | output 생성을 위해 선별한 segment/artifact/trust 묶음 |
@@ -156,7 +156,7 @@ Continuum은 모든 테이블을 append-only로 만들지는 않는다. 대신 *
 | `segments` | Immutable | workflow state와 lineage의 기준점 | 내용 변경 시 새 segment, 기존 segment는 superseded 연결 |
 | `workflows` | Mutable metadata | workflow 설정/표시명은 바뀔 수 있음 | key는 고정, mode/metadata/policy update |
 | `workflow_packages` | Immutable versioned spec | host-agnostic workflow spec은 버전 단위로 고정 | 변경 시 새 version/package |
-| `workflow_segment_state` | Mutable state | queue와 처리 상태이므로 변해야 함 | pending → processed/skipped/failed update |
+| `workflow_segment_state` | Mutable state | queue, claim, 처리 상태이므로 변해야 함 | pending → claimed → processed/skipped/failed update |
 | `runs` | Append-only record | 실행 1회는 감사 로그 | row 생성 후 status/finished_at/error만 completion update |
 | `run_inputs` | Append-only | run의 입력 근거 | run 생성 시 insert, 이후 수정 금지 |
 | `context_bundles` | Immutable input package | output 생성 입력 패키지는 재현 근거 | 변경 시 새 bundle 생성 |

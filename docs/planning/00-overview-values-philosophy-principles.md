@@ -249,17 +249,19 @@ Plaud recording = recording + extraction_pending
    - input contract, output contract, required capability, safety policy, guide를 포함한다.
    - Hermes, Claude Code, Codex, MCP client, local script가 같은 workflow package를 각자 실행할 수 있어야 한다.
 
-### 3.4 v1 범위 원칙
+### 3.4 구현 범위 원칙
 
-v1은 의도적으로 좁게 시작한다.
+Continuum은 MVP로 작게 끝내는 제품이 아니라, 아래 capability를 모두 구현해야 하는 장기 제품이다. 다만 구현은 위험도가 낮은 순서로 나누고, 각 phase는 다음 phase를 막지 않는 안정적인 기반을 남겨야 한다.
 
-1. **Polling only** — push/webhook runtime은 v2로 미룬다.
-2. **Single-writer** — 여러 agent가 동시에 DB에 쓰지 않는다.
-3. **Immutable segment** — segment 내용 변경 시 새 segment를 만들고 기존 segment를 supersede한다.
-4. **Default sensitivity at ingest** — 민감도는 ingest 시점에 source 기본값으로 부여한다.
-5. **Derived output is not routing input by default** — output 재순환을 기본 차단한다.
-6. **Unrouted is visible** — routing되지 않은 segment는 audit 대상이다.
-7. **Proposal before side effect** — 외부 write/execute는 proposal/draft와 approval state를 거친다.
+1. **CLI-first, MCP-ready, daemon-capable** — CLI를 먼저 만들되 MCP server와 daemon이 같은 service layer를 쓰도록 설계한다.
+2. **Single-writer first, lease-ready** — 초기에는 단일 writer로 안전하게 시작하되 multi-agent claim/lease 모델을 같은 queue abstraction 안에 포함한다.
+3. **Polling first, push-ready** — polling collector를 먼저 검증하되 push/webhook inbox와 trigger policy를 동일 item/segment 모델에 합류시킨다.
+4. **Static routing first, dynamic routing-ready** — hardcoded/static routing으로 시작하되 routing rule schema와 audit view는 dynamic rule engine까지 견딜 수 있어야 한다.
+5. **Immutable segment** — segment 내용 변경 시 새 segment를 만들고 기존 segment를 supersede한다.
+6. **Default sensitivity at ingest** — 민감도는 ingest 시점에 source 기본값으로 부여한다.
+7. **Derived output is not routing input by default** — output 재순환을 기본 차단한다.
+8. **Unrouted is visible** — routing되지 않은 segment는 audit 대상이다.
+9. **Proposal before side effect** — 외부 write/execute는 proposal/draft와 approval state를 거친다.
 
 ### 3.5 원칙 위배 체크리스트
 

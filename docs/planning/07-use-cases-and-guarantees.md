@@ -37,7 +37,7 @@
 
 애매한 점:
 - 일기는 자동 저장해도 되는가?
-- 답: v1은 draft까지만 생성. 사용자가 승인하면 저장.
+- 답: 기본은 draft까지만 생성한다. 사용자가 승인하면 저장한다.
 
 ---
 
@@ -60,7 +60,7 @@ draft(code, py): 자동 정리 스크립트 초안
 
 애매한 점:
 - 자동으로 Reminders/Calendar에 쓰면 위험함
-- 답: v1은 `proposal + draft` 생성까지만. write/execute는 별도 승인 필요.
+- 답: 기본은 `proposal + draft` 생성까지만 한다. write/execute는 별도 승인 필요.
 
 ---
 
@@ -107,7 +107,7 @@ Continuum이 보장하지 않는 것:
 
 ### 11.2 Segment routing
 
-모든 segment를 모든 workflow에 넣으면 소음이 폭발한다. v1부터 routing layer가 필요하다.
+모든 segment를 모든 workflow에 넣으면 소음이 폭발한다. 초기 구현부터 routing layer가 필요하다.
 
 ```sql
 CREATE TABLE routing_rules (
@@ -138,16 +138,14 @@ routing 결과는 `workflow_segment_state`에 `pending`으로 materialize한다.
 
 ### 11.3 Claim / lease 모델
 
-외부 리뷰 결과, v1에서는 claim/lease를 구현하지 않는다. v1은 single-writer로 시작한다.
-
-v2에서 여러 agent가 같은 workflow를 동시에 처리하게 되면 `claimed` 상태와 lease를 도입한다.
+Claim/lease는 multi-agent 동시 처리와 long-running worker를 위한 필수 queue capability다. 초기에는 single-writer 운영으로 시작할 수 있지만, 상태 모델과 CLI는 claim/lease를 포함한다.
 
 ```sql
 ALTER TABLE workflow_segment_state ADD COLUMN claim_owner TEXT;
 ALTER TABLE workflow_segment_state ADD COLUMN claim_expires_at TEXT;
 ```
 
-v2 처리 흐름:
+처리 흐름:
 
 ```text
 pending → claimed(owner, expires_at) → processed/skipped/failed
@@ -155,7 +153,7 @@ pending → claimed(owner, expires_at) → processed/skipped/failed
 
 lease가 만료되면 다시 pending으로 돌릴 수 있다.
 
-v2 CLI:
+CLI:
 
 ```bash
 continuum workflows claim daily_report --limit 20 --owner hermes
@@ -194,7 +192,7 @@ morning_report / diary / gbrain_fanout / todo_planner
 
 ### 11.5 Segment type 표준
 
-v1 기본 segment type:
+기본 segment type:
 
 | Segment type | 의미 | 주 사용처 |
 |---|---|---|
@@ -205,7 +203,7 @@ v1 기본 segment type:
 | `thread_summary` | thread 요약 | report |
 | `source_health` | 수집 상태/오류 | report/system health |
 
-v1.5 이후 agent/enricher가 안정화되면 아래 candidate segment를 추가한다.
+candidate segment type:
 
 | Segment type | 의미 | 주 사용처 |
 |---|---|---|
@@ -274,15 +272,15 @@ webhook → inbound_events(received) → connector adapter → item/segment → 
 | Slack incremental ingest | channel cursor + message/thread item화 |
 | 일일/아침 보고 | workflow별 pending queue + lineage |
 | 일기 draft | personal segment routing + 승인 기반 저장 |
-| Todo 후보 추출 | v1.5: action_candidate segment |
-| Calendar 후보 추출 | v1.5: event_candidate segment |
-| GBrain fanout | v1.5: durable_fact/entity candidate + skipped reason |
-| 외부 agent 연동 | v1: CLI read-only + output/draft 제출, v2: claim/complete |
-| push trigger | v2: inbound_events + routing_rules |
+| Todo 후보 추출 | action_candidate segment |
+| Calendar 후보 추출 | event_candidate segment |
+| GBrain fanout | durable_fact/entity candidate + skipped reason |
+| 외부 agent 연동 | CLI/MCP read + output/draft 제출 + claim/complete |
+| push trigger | inbound_events + routing_rules |
 
 어려운 use-case:
 
-| Use-case | 이유 | v1 대응 |
+| Use-case | 이유 | 대응 |
 |---|---|---|
 | 모든 source 과거 전체 복원 | API/권한/삭제 제한 | best-effort backfill |
 | 완전 자율 todo/calendar write | side effect 위험 | proposal + 승인 |
@@ -293,7 +291,7 @@ webhook → inbound_events(received) → connector adapter → item/segment → 
 
 ---
 
-### 11.9 v1에서 반드시 피할 함정
+### 11.9 반드시 피할 함정
 
 1. source별 전용 테이블을 많이 만들지 않는다.
 2. workflow가 raw 파일을 직접 스캔하게 두지 않는다.

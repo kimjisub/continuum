@@ -10,15 +10,15 @@ Continuum은 “CLI를 설치하고 skill 파일 하나를 등록하면 끝나�
 
 | 구성요소 | 역할 | 필수 여부 |
 |---|---|---|
-| `continuum` CLI | runtime DB 초기화, source 수집, workflow queue 조회/처리, output/lineage/feedback 기록 | v1 필수 |
+| `continuum` CLI | runtime DB 초기화, source 수집, workflow queue 조회/처리, output/lineage/feedback 기록 | 필수 |
 | runtime DB/files | `runtime/continuum.db`, artifacts, outputs, logs. 실제 상태와 근거의 SSOT | 필수 |
 | workflow package | workflow의 input/output contract, required capabilities, safety policy, guide | workflow 실행 시 필수 |
 | Hermes skill | Hermes가 특정 workflow package를 어떻게 사용할지 알려주는 host adapter/사용법 문서 | Hermes 연동 시 필요 |
-| MCP server | Claude Desktop, Hermes MCP client, 다른 agent가 Continuum을 표준 tool surface로 쓰는 통합 채널 | v1.5/v2 목표 |
+| MCP server | Claude Desktop, Hermes MCP client, 다른 agent가 Continuum을 표준 tool surface로 쓰는 통합 채널 | 필수 capability |
 
 즉 skill은 “agent에게 사용법을 가르치는 파일”이지, Continuum runtime 자체가 아니다. 실제 상태 변화는 CLI/MCP가 같은 core service layer를 통해 DB에 기록해야 한다.
 
-### 9.0.2 v1 실제 사용 흐름
+### 9.0.2 실제 사용 흐름
 
 ```text
 1. 설치
@@ -112,7 +112,7 @@ CLI와 MCP는 서로 다른 구현이 아니라 같은 core service layer의 두
 
 ### 9.0.5 Daemon / background process 모델
 
-기본 v1은 **always-on daemon을 요구하지 않는다.** Continuum의 기본 단위는 짧게 실행되고 종료되는 CLI command다.
+기본 runtime은 **always-on daemon을 요구하지 않는다.** Continuum의 기본 단위는 짧게 실행되고 종료되는 CLI command다.
 
 ```text
 cron / Hermes cron / launchd / shell
@@ -128,14 +128,14 @@ cron / Hermes cron / launchd / shell
 - local-first와 inspectability가 좋다.
 - 죽어 있는 daemon 때문에 수집이 멈추는 failure mode를 줄인다.
 - 사용자는 `continuum doctor`, DB, log 파일로 상태를 직접 확인할 수 있다.
-- v1 single-writer 원칙과 잘 맞는다.
+- 초기 single-writer 운영과 잘 맞는다.
 
 다만 장기적으로는 두 종류의 long-running process가 있을 수 있다.
 
 | Process | 명령 | 역할 | 필수 여부 |
 |---|---|---|---|
 | MCP server | `continuum mcp serve` | 외부 agent/host에 MCP tools 노출 | MCP 연동 시 필요 |
-| Continuum daemon | `continuum daemon` | local scheduler, file watcher, queue worker, health monitor | 선택 사항 / v2 |
+| Continuum daemon | `continuum daemon` | local scheduler, file watcher, queue worker, health monitor | 필수 capability, 기본 설치에서는 off |
 
 따라서 설치 후 기본 UX는 daemon을 켜는 것이 아니라:
 
@@ -220,7 +220,7 @@ continuum workflows mark daily_report <segment_id> processed
 continuum workflows retry daily_report --failed
 ```
 
-v1에서는 위 명령을 single-writer process/operator만 실행한다. 외부 agent는 기본적으로 read-only + output/draft 제출로 제한한다.
+초기 운영에서는 위 명령을 single-writer process/operator만 실행한다. 외부 agent는 기본적으로 read-only + output/draft 제출로 제한하고, claim/lease가 활성화되면 여러 worker가 안전하게 처리할 수 있다.
 
 ### 9.6 lineage
 
@@ -241,13 +241,13 @@ continuum drafts supersede <draft_id> --path revised.md
 continuum drafts execute <draft_id>   # code draft 등 명시 승인 후 실행
 ```
 
-초안 실행은 기본적으로 위험한 side effect이므로 v1에서는 `approve`와 별도 `execute`를 분리한다.
+초안 실행은 기본적으로 위험한 side effect이므로 `approve`와 별도 `execute`를 분리한다.
 
 ### 9.8 MCP interface
 
 MCP는 Continuum을 agent/host가 표준 protocol로 쓰기 위한 1급 integration surface다.
 
-v1은 CLI를 먼저 구현하되, 아래 기능은 MCP tool로 그대로 노출 가능한 boundary를 유지한다.
+CLI를 먼저 구현하되, 아래 기능은 MCP tool로 그대로 노출 가능한 boundary를 유지한다.
 
 | MCP tool 후보 | 대응 CLI | 용도 |
 |---|---|---|

@@ -47,11 +47,11 @@ uv run continuum
 
 ## Runtime / daemon model
 
-Continuum is primarily a **CLI + local runtime DB**. It should not require an always-on daemon for basic use.
+Continuum is primarily a **CLI + local runtime DB** for basic use, with daemon and MCP surfaces as required capabilities.
 
-- **Default v1:** no daemon. Cron/Hermes/shell invokes `continuum collect`, `continuum route`, `continuum workflows ...` as short-lived commands.
-- **Optional daemon later:** `continuum daemon` may run local scheduling/watchers, queue workers, and health checks.
-- **MCP server:** `continuum mcp serve` is a long-running process, but only needed when an agent host wants MCP tools.
+- **Default operation:** no daemon required. Cron/Hermes/shell invokes `continuum collect`, `continuum route`, `continuum workflows ...` as short-lived commands.
+- **Daemon capability:** `continuum daemon` runs local scheduling/watchers, queue workers, and health checks when enabled.
+- **MCP server:** `continuum mcp serve` is a long-running process for agent hosts that want MCP tools.
 
 ## Repository layout
 

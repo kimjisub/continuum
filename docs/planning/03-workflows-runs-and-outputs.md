@@ -22,7 +22,7 @@ CREATE TABLE workflows (
   key TEXT NOT NULL UNIQUE,
   display_name TEXT,
   mode TEXT NOT NULL, -- deterministic | agent
-  trigger_policy_json TEXT, -- v2: push/schedule trigger policy
+  trigger_policy_json TEXT, -- push/schedule trigger policy
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -39,7 +39,7 @@ Workflow package는 host-agnostic workflow 정의다.
 ```sql
 CREATE TABLE workflow_packages (
   id INTEGER PRIMARY KEY,
-  key TEXT NOT NULL UNIQUE,
+  key TEXT NOT NULL,
   version TEXT NOT NULL,
   package_path TEXT NOT NULL,
   input_contract_json TEXT NOT NULL,
@@ -48,7 +48,8 @@ CREATE TABLE workflow_packages (
   safety_policy_json TEXT,
   guide_path TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  UNIQUE(key, version)
 );
 ```
 
@@ -68,8 +69,10 @@ CREATE TABLE workflow_packages (
 CREATE TABLE workflow_segment_state (
   workflow_id INTEGER NOT NULL,
   segment_id INTEGER NOT NULL,
-  status TEXT NOT NULL, -- pending | processed | skipped | failed
+  status TEXT NOT NULL, -- pending | claimed | processed | skipped | failed
   reason TEXT,
+  claim_owner TEXT,
+  claim_expires_at TEXT,
   processed_at TEXT,
   run_id INTEGER,
   attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -81,7 +84,7 @@ CREATE TABLE workflow_segment_state (
 
 이 테이블이 “빠짐없이 태운다”의 핵심이다.
 
-v1은 single-writer이므로 `claimed`/lease는 쓰지 않는다. multi-agent 동시 writer가 필요해지는 시점에 v2에서 lease를 도입한다.
+초기 runtime은 single-writer로 운영할 수 있지만, 스키마와 상태 모델은 multi-agent claim/lease까지 포함한다. 단일 writer는 `claimed`를 생략하고 `pending → processed/skipped/failed`로 처리할 수 있다. 여러 worker가 붙으면 `pending → claimed(owner, expires_at) → processed/skipped/failed` 흐름을 사용한다.
 
 `reason`은 enum으로 제한한다.
 
@@ -222,7 +225,7 @@ CREATE TABLE lineage (
 
 ### 6.13 Schema migrations
 
-Phase가 진행될수록 스키마가 바뀌므로 migration 기록은 v1 필수다.
+Phase가 진행될수록 스키마가 바뀌므로 migration 기록은 필수다.
 
 ```sql
 CREATE TABLE schema_migrations (

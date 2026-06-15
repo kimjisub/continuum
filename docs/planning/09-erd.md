@@ -184,7 +184,7 @@ erDiagram
 
     WORKFLOW_PACKAGES {
       integer id PK
-      text key UK
+      text key
       text version
       text package_path
       text input_contract_json
@@ -201,6 +201,8 @@ erDiagram
       integer segment_id PK,FK
       text status
       text reason
+      text claim_owner
+      text claim_expires_at
       text processed_at
       integer run_id FK
       integer attempt_count

@@ -57,8 +57,8 @@ item_type = thread
 Thread summary는 aggregate segment다.
 
 ```text
-thread_summary_v1 = reply 1~5 기준
-thread_summary_v2 = reply 1~10 기준
+thread_summary_version_1 = reply 1~5 기준
+thread_summary_version_2 = reply 1~10 기준
 ```
 
 thread가 자라면 기존 summary를 수정하지 않고 새 summary를 만들며, 기존 summary는 superseded 처리한다.
@@ -106,7 +106,7 @@ item-level sync state: 기존 thread 내부 증가분 발견
 
 Slack 메시지는 수정/삭제될 수 있다.
 
-v1 정책:
+수정/삭제 정책:
 
 - 수정: 새 segment 생성 + 기존 segment supersede
 - 삭제: item status를 `deleted`로 바꾸고 tombstone metadata를 남김
@@ -134,7 +134,7 @@ watermark_window = 최근 10~30분 재스캔
 
 ## 8. Push와 polling
 
-Continuum은 장기적으로 둘 다 지원해야 한다. 단, **v1은 polling only**로 시작한다.
+Continuum은 polling과 push를 모두 지원해야 한다. 구현 순서는 polling collector를 먼저 안정화하고, 이후 push/webhook을 같은 item/segment 모델에 붙이는 방식이다.
 
 ### 8.1 Polling
 
@@ -150,7 +150,7 @@ cron이 이 명령을 주기적으로 실행한다.
 
 ### 8.2 Push
 
-> v2 범위. v1에서는 설계만 남기고 구현하지 않는다.
+Push/webhook runtime은 선택적 확장이 아니라 Continuum의 필수 capability다. 다만 polling collector와 같은 item/segment 모델로 합류해야 하므로, polling 경로를 먼저 안정화한 뒤 같은 ledger에 붙인다.
 
 외부 이벤트가 오면 `_inbox`에 먼저 기록하고, 즉시 workflow trigger를 평가한다.
 
@@ -176,9 +176,7 @@ workflow enqueue
 
 ### 8.3 Trigger policy
 
-> v2 범위. v1에서는 cron/polling 명령으로 workflow를 실행한다.
-
-workflow는 장기적으로 polling과 push trigger를 둘 다 가질 수 있다.
+Trigger policy도 필수 runtime capability다. 초기 구현은 static schedule과 static routing rule로 시작할 수 있지만, 최종적으로는 polling과 push trigger를 모두 같은 workflow contract에 표현해야 한다.
 
 예:
 
