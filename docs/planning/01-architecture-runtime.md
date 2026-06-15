@@ -277,19 +277,20 @@ Trigger policy도 필수 runtime capability다. 초기 구현은 static schedule
 
 ### 9. Runtime 사용 모델
 
-Continuum은 “CLI를 설치하고 skill 파일 하나를 등록하면 끝나는” 구조가 아니다. CLI, runtime DB, workflow package/skill, agent/MCP가 각각 다른 역할을 맡는다.
+Continuum은 Hermes를 대체하는 실행 환경이 아니다. Hermes가 실행하고, Continuum은 실행에 필요한 맥락 상태와 실행 결과의 근거를 기록한다. CLI, runtime DB, workflow package/skill, agent/MCP는 각각 다른 역할을 맡는다.
 
 #### 9.0.1 역할 분리
 
 | 구성요소 | 역할 | 필수 여부 |
 |---|---|---|
+| Hermes Agent | 대화 UI, gateway, cron, tool call, LLM reasoning, 승인 요청, 실제 workflow 실행 | Hermes 연동 시 실행자 |
 | `continuum` CLI | runtime DB 초기화, source 수집, workflow queue 조회/처리, output/lineage/feedback 기록 | 필수 |
 | runtime DB/files | `runtime/continuum.db`, artifacts, outputs, logs. 실제 상태와 근거의 SSOT | 필수 |
 | workflow package | workflow의 input/output contract, required capabilities, safety policy, guide | workflow 실행 시 필수 |
 | Hermes skill | Hermes가 특정 workflow package를 어떻게 사용할지 알려주는 host adapter/사용법 문서 | Hermes 연동 시 필요 |
 | MCP server | Claude Desktop, Hermes MCP client, 다른 agent가 Continuum을 표준 tool surface로 쓰는 통합 채널 | 필수 capability |
 
-즉 skill은 “agent에게 사용법을 가르치는 파일”이지, Continuum runtime 자체가 아니다. 실제 상태 변화는 CLI/MCP가 같은 core service layer를 통해 DB에 기록해야 한다.
+즉 skill은 “agent에게 사용법을 가르치는 파일”이지, Continuum runtime 자체가 아니다. Hermes는 workflow를 실행하고, 실제 상태 변화는 CLI/MCP가 같은 core service layer를 통해 DB에 기록해야 한다.
 
 #### 9.0.2 실제 사용 흐름
 
@@ -317,8 +318,9 @@ Continuum은 “CLI를 설치하고 skill 파일 하나를 등록하면 끝나�
    continuum workflows pending morning_report
 
 6. agent/workflow 실행
-   Hermes skill 또는 workflow package가 pending segment를 읽고 context bundle을 만든다.
-   agent는 report/draft/proposal을 생성한다.
+   Hermes가 skill 또는 MCP tool을 통해 pending segment를 읽고 context bundle을 만든다.
+   Hermes/agent는 report/draft/proposal을 생성한다.
+   Continuum은 이 실행의 입력/출력/상태만 기록한다.
 
 7. 결과 기록
    continuum bundles create ...
