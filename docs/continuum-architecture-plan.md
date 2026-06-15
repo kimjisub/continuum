@@ -684,7 +684,49 @@ CREATE TABLE draft_versions (
 
 ---
 
-### 6.15 Source actors
+### 6.15 Item sync state
+
+Slack thread처럼 item 자체가 시간이 지나며 자라는 aggregate가 있다.
+
+channel cursor는 새 root message를 찾는 데 필요하지만, thread reply 증가를 추적하기에는 부족하다. 그래서 item별 sync state를 둔다.
+
+```sql
+CREATE TABLE item_sync_state (
+  item_id INTEGER NOT NULL,
+  sync_kind TEXT NOT NULL, -- thread_replies | file_children | calendar_updates | document_versions
+  cursor_value TEXT,
+  count_seen INTEGER,
+  latest_child_external_id TEXT,
+  latest_child_occurred_at TEXT,
+  last_checked_at TEXT,
+  last_full_sync_at TEXT,
+  stale_after TEXT,
+  metadata_json TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(item_id, sync_kind)
+);
+```
+
+예:
+
+```text
+Slack thread item
+  sync_kind = thread_replies
+  cursor_value = latest_reply_ts
+  count_seen = reply_count_seen
+  latest_child_occurred_at = latest reply ts
+```
+
+규칙:
+
+- `stream_cursors`는 stream-level 수집 위치다.
+- `item_sync_state`는 item-level aggregate 내부 동기화 위치다.
+- Slack thread, mail thread, calendar event update, document version처럼 “원본 item이 계속 자라는 경우”에 쓴다.
+- item_sync_state는 mutable state이며, 근거 데이터는 아니다.
+
+---
+
+### 6.16 Source actors
 
 Provenance-first 원칙상 “어느 소스에서 왔는가”뿐 아니라 “어떤 사람/계정이 관련됐는가”도 추적해야 한다.
 
@@ -725,7 +767,7 @@ CREATE TABLE item_actor_links (
 
 ---
 
-### 6.16 Evidence trust
+### 6.17 Evidence trust
 
 Provenance-first는 단순히 “출처를 남긴다”가 아니라, **근거의 신뢰도와 충돌 관계를 관리한다**는 뜻이다.
 
@@ -781,15 +823,28 @@ Slack은 가장 까다로운 케이스다.
 
 ### 7.1 수집
 
+Slack은 하나의 단순 append stream으로 보면 안 된다.
+
+```text
+channel timeline = append stream
+thread replies = item-level mutable aggregate
+```
+
 각 channel이 stream이다.
 
 ```text
 stream.key = slack:alpaon:#synapus
 shape = append_stream
-cursor = latest_ts
+stream_cursor = latest_channel_ts
 ```
 
-collector는 `latest_ts` 이후 메시지를 가져온다.
+collector는 channel timeline을 watermark window와 함께 수집한다.
+
+```text
+fetch range = [latest_channel_ts - watermark_window, now]
+```
+
+이 단계에서 새 root message, 일반 message, thread root 후보를 찾는다.
 
 ### 7.2 item 단위
 
@@ -809,11 +864,60 @@ item_type = thread
 
 ### 7.3 segment 단위
 
-- 짧은 메시지: segment 1개
-- 긴 thread: thread summary + reply chunks
+- 짧은 메시지: `message` segment 1개
+- thread reply: reply별 `message` segment
+- 긴 thread: 최신 reply 집합 기준 `thread_summary` segment
 - unread/activity snapshot: artifact로 저장하되, 직접 workflow 처리 단위로 보지 않음
 
-### 7.4 수정/삭제
+Thread summary는 aggregate segment다.
+
+```text
+thread_summary_v1 = reply 1~5 기준
+thread_summary_v2 = reply 1~10 기준
+```
+
+thread가 자라면 기존 summary를 수정하지 않고 새 summary를 만들며, 기존 summary는 superseded 처리한다.
+
+### 7.4 thread reply sync
+
+Thread는 channel timeline cursor만으로는 충분하지 않다.
+
+예:
+
+```text
+어제 수집: thread T reply 1~5
+오늘 수집: thread T reply 1~10
+```
+
+처리 방식:
+
+1. channel timeline 수집에서 thread root의 `reply_count` 또는 `latest_reply` 변화를 감지한다.
+2. `item_sync_state(item_id=T, sync_kind=thread_replies)`를 읽는다.
+3. `reply_count_seen` 또는 `latest_reply_ts`가 증가했으면 Slack conversations.replies를 호출한다.
+4. 기존 reply 1~5는 `external_id` unique constraint로 dedupe한다.
+5. 새 reply 6~10만 item/segment로 추가한다.
+6. thread 전체 의미가 바뀌었으므로 새 `thread_summary` segment를 만든다.
+7. 기존 `thread_summary`는 `superseded_by_segment_id`로 새 summary에 연결한다.
+8. 새 reply segments와 새 summary segment를 routing한다.
+9. `item_sync_state`를 최신 reply 상태로 update한다.
+
+```text
+stream_cursors
+  slack channel latest_channel_ts
+
+item_sync_state
+  thread T latest_reply_ts
+  thread T reply_count_seen
+```
+
+즉 Slack은 두 단계 상태를 가진다.
+
+```text
+stream-level cursor: 새 channel message 발견
+item-level sync state: 기존 thread 내부 증가분 발견
+```
+
+### 7.5 수정/삭제
 
 Slack 메시지는 수정/삭제될 수 있다.
 
@@ -824,7 +928,7 @@ v1 정책:
 - 이미 생성된 report/diary/GBrain output은 당시 시점 스냅샷으로 유지
 - 추가 답글로 thread 의미가 바뀌면 새 `thread_summary` segment 생성
 
-### 7.5 late arrival / watermark
+### 7.6 late arrival / watermark
 
 append stream cursor는 단순 `latest_ts`만 믿지 않는다.
 
@@ -835,7 +939,7 @@ watermark_window = 최근 10~30분 재스캔
 
 뒤늦게 나타난 메시지, retry, thread reply 누락을 줄이기 위해 collector는 watermark window 안의 최근 구간을 반복 스캔한다.
 
-### 7.6 snapshot 처리
+### 7.7 snapshot 처리
 
 `unread`, `activity`, `channels`는 직접 workflow 처리 단위가 아니라 snapshot artifact다.
 
@@ -1393,6 +1497,7 @@ Continuum은 개인 맥락의 SSOT다.
 erDiagram
     STREAMS ||--o{ STREAM_CURSORS : tracks_collection_position
     STREAMS ||--o{ ITEMS : emits
+    ITEMS ||--o{ ITEM_SYNC_STATE : tracks_aggregate_sync
     ITEMS ||--o{ ITEM_ACTOR_LINKS : involves
     SOURCE_ACTORS ||--o{ ITEM_ACTOR_LINKS : participates_as
     ITEMS ||--o{ EVIDENCE_TRUST_ASSESSMENTS : can_be_assessed
@@ -1458,6 +1563,20 @@ erDiagram
       text status
       text raw_path
       text metadata_json
+    }
+
+    ITEM_SYNC_STATE {
+      integer item_id PK,FK
+      text sync_kind PK
+      text cursor_value
+      integer count_seen
+      text latest_child_external_id
+      text latest_child_occurred_at
+      text last_checked_at
+      text last_full_sync_at
+      text stale_after
+      text metadata_json
+      text updated_at
     }
 
     SOURCE_ACTORS {
@@ -1636,6 +1755,7 @@ erDiagram
 | `streams` | 수집 입구 | Slack 채널, Plaud 계정, Mail inbox처럼 계속 읽을 수 있는 외부 입구 |
 | `stream_cursors` | 수집 위치표 | connector 자체가 아니라 stream별 위치를 기록하므로 `connector_cursors`가 아니라 `stream_cursors` |
 | `items` | 원본 객체 | 외부 시스템에서 온 원본 단위 하나 |
+| `item_sync_state` | item 내부 동기화 상태 | Slack thread reply cursor, mail thread cursor |
 | `source_actors` | 출처 안의 사람/계정 | Slack user, email address, calendar attendee |
 | `item_actor_links` | item-actor 관계 | sender, author, attendee, mentioned, speaker |
 | `evidence_trust_assessments` | 근거 신뢰도 평가 | pre/post trust score, verified/disputed |
@@ -1766,6 +1886,7 @@ Continuum은 모든 테이블을 append-only로 만들지는 않는다. 대신 *
 | `streams` | Mutable metadata | stream 이름/표시명/설정은 바뀔 수 있음 | `key`는 가능하면 고정, display/metadata는 update |
 | `stream_cursors` | Mutable state | 수집 위치는 계속 앞으로 이동 | cursor_value update |
 | `items` | Soft-mutable + soft delete | 외부 원본 객체는 수정/삭제될 수 있음 | status/content_hash/metadata update, 삭제는 `status=deleted` |
+| `item_sync_state` | Mutable state | item 내부 aggregate 동기화 위치는 계속 변함 | cursor/count/last_checked update |
 | `source_actors` | Soft-mutable identity metadata | source 안의 표시명/handle/email은 바뀔 수 있음 | external_actor_id는 고정, profile fields update |
 | `item_actor_links` | Append-only relation | item의 출처/참여자 근거 | insert만 허용, 잘못 수집한 경우 correction output/run으로 처리 |
 | `evidence_trust_assessments` | Append-only evaluation | 신뢰도는 시점별 평가 이력 | 새 평가를 insert, 과거 평가 수정 금지 |
