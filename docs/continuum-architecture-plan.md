@@ -1,6 +1,6 @@
 # Continuum 기획서
 
-> 작업명: **Continuum**  
+> 작업명: **Continuum**
 > 한 줄 정의: **모든 맥락을 수집하고, 누락 없이 사용자의 워크플로우에 태우는 개인 맥락 운영체제**
 
 ---
@@ -22,176 +22,111 @@ Continuum은 사용자의 맥락이 끊기지 않고 흐르는 하나의 연속�
 
 ---
 
-## 2. 제품 가치
+## 2. 가치 — 왜 이 제품이 필요한가
 
-Continuum의 핵심 가치는 네 가지다.
+여기서 **가치**는 구현 방식이나 설계 취향이 아니라, 사용자가 Continuum을 통해 실제로 얻게 되는 결과다.
+따라서 “SQLite를 쓴다”, “MCP를 지원한다”, “agent-neutral하다”는 가치가 아니라 그 가치를 만들기 위한 수단이다.
 
-1. **Capture observable context with provenance**
-   - Slack, Plaud, Mail, Calendar, Reminder, 브라우저, 세션, 파일, 직접 입력 등 접근 가능한 source에서 관측 가능한 맥락을 수집한다.
-   - 단순히 “많이 모으는 것”이 아니라, 출처/source, 관련 actor, 수집 run, 신뢰도, 민감도까지 함께 남긴다.
-   - 수집 실패, 권한 부족, 누락 가능성도 상태로 드러낸다.
+Continuum의 가치는 네 가지다.
 
-2. **Route relevant context without silent drops**
-   - 일일 보고, 아침 보고, 일기, todo/calendar 조율, GBrain 저장 등 각 workflow가 필요한 맥락을 가져다 쓸 수 있도록 라우팅한다.
-   - “모든 raw text를 모든 workflow가 읽는다”가 아니라, relevant segment가 queue에 들어가고 processed/skipped/failed 중 하나의 명시 상태를 남기는 것이 목표다.
-   - 가장 위험한 실패는 에러가 아니라 조용한 누락이므로, unrouted/failed/conflicted 상태를 드러낸다.
+1. **맥락이 끊기지 않는다**
+   - Slack, Plaud, Mail, Calendar, Reminder, 브라우저, 세션, 파일, 직접 입력 등 흩어진 맥락이 하나의 연속된 기록으로 남는다.
+   - 사용자는 “그 얘기가 어디 있었더라?”를 매번 source별로 다시 뒤지지 않아도 된다.
+   - agent나 도구가 바뀌어도 사용자의 맥락 자산은 사라지지 않는다.
 
-3. **Keep context user-owned and agent-neutral**
-   - 맥락은 특정 agent의 memory가 아니라 사용자 소유의 중립 core에 남는다.
-   - Hermes, Claude Code, Codex, Gemini, local scripts, MCP server, custom agent가 모두 같은 CLI/DB 기반 SSOT에 붙을 수 있다.
-   - agent가 바뀌어도 맥락, 처리 상태, lineage, 신뢰도 평가는 유지된다.
+2. **중요한 맥락이 조용히 묻히지 않는다**
+   - relevant context는 적절한 workflow queue에 올라가고, 처리/스킵/실패 중 하나의 상태를 남긴다.
+   - 성공은 “모든 raw text를 다 읽었다”가 아니라 “필요한 맥락이 누락 없이 처리 경로에 탔다”이다.
+   - 놓친 것이 있으면 사용자가 확인할 수 있어야 한다.
 
-4. **Improve user-visible outcomes**
-   - Continuum은 process state만 잘 남기는 시스템이 아니라, workflow가 실제로 더 좋은 결과물을 만들도록 돕는 context substrate다.
-   - draft/report/proposal/code output은 사용자가 체감하는 품질 지표를 가져야 한다.
-   - 예: draft accepted rate, edit distance/draft delta, unedited send rate, time-to-draft, report useful item count, false-positive/false-negative feedback.
+3. **결과물의 근거를 설명할 수 있다**
+   - 보고서, 초안, todo/calendar proposal, GBrain 후보가 어떤 source/item/segment/context bundle을 근거로 나왔는지 추적된다.
+   - 잘못된 결과가 나오면 “LLM이 그렇게 말했다”가 아니라 어떤 입력과 어떤 판단 경로가 문제였는지 되짚을 수 있다.
+   - 신뢰도, 민감도, 충돌 관계가 결과물과 함께 남는다.
 
----
-
-## 2.5 철학과 검증 원칙
-
-Continuum은 기능보다 먼저 지켜야 할 철학이 있다. 이후 설계/구현 변경은 이 원칙에 위배되지 않는지 계속 검증한다.
-
-### 2.5.1 핵심 철학
-
-1. **Agent-neutral core**
-   - Hermes, Claude Code, Codex, Gemini, local script, MCP server 중 어느 하나에도 종속되지 않는다.
-   - core는 SQLite + filesystem + CLI 중심으로 유지한다.
-   - agent는 consumer/producer 중 하나일 뿐, 시스템의 전제 조건이 아니다.
-
-2. **Deterministic-first**
-   - cron, cursor, dedupe, sync, hash, routing, 상태 업데이트처럼 결정론적으로 처리 가능한 일은 deterministic worker가 담당한다.
-   - LLM/agent는 의미 판단, 요약, 초안 작성처럼 비결정론적 판단이 필요한 곳에만 쓴다.
-   - 과하게 agent를 쓰지 않는다.
-
-3. **Provenance-first / Trust-aware evidence**
-   - 모든 정보는 출처를 추적할 수 있어야 하고, 동시에 **얼마나 믿을 만한 정보인지** 관리되어야 한다.
-   - 모순된 정보가 들어오면 “가장 최근 정보”가 아니라 **더 신뢰도 높은 근거**가 우선한다.
-   - 신뢰도는 숫자 점수보다 **근거 유형과 평가 주체**가 우선이다. `trust_score`는 optional metadata이고, `trust_level`, `basis`, `assessed_by`를 더 중요하게 본다.
-   - 신뢰도는 두 단계로 관리한다.
-     - **선평가(pre-assessment)**: source/stream/actor/수집 방식에 따른 기본 신뢰도
-     - **후평가(post-assessment)**: 나중에 검증, 반박, 사용자 확인, 더 강한 근거 발견으로 갱신되는 신뢰도
-   - 최소한 다음을 남긴다.
-     - 어느 source/stream에서 왔는가
-     - 외부 시스템의 원본 id는 무엇인가
-     - 어떤 사람/계정/채널과 관련 있는가
-     - 어떤 artifact/segment/output으로 변환됐는가
-     - 어떤 run이 만들었는가
-     - 선평가/후평가 기준 신뢰도는 얼마인가
-     - 모순되는 정보가 있다면 무엇과 충돌하는가
-   - “좋은 요약”보다 “근거와 신뢰도를 설명할 수 있는 요약”이 우선이다.
-
-4. **Abstraction router between sources and workflows**
-   - Continuum은 앞단의 source와 뒷단의 workflow 양쪽 모두에 대해 추상화 계층으로 접근한다.
-   - source는 Slack/Plaud/Mail/Calendar처럼 서로 달라도 `stream → item → artifact/segment` 형태로 정규화된다.
-   - workflow는 daily_report, diary, todo_planner, gbrain_fanout처럼 서로 달라도 `pending segment → output/lineage` 형태로 소비한다.
-   - Continuum core의 역할은 “특정 사용법을 강제하는 앱”이 아니라, source에서 들어온 맥락을 workflow가 필요에 맞게 가져다 쓸 수 있도록 **라우팅해주는 router/hub**다.
-   - core는 “일일 보고를 이렇게 써라”, “GBrain에 이것을 넣어라”, “어떤 답장을 보내라” 같은 구체적 제품 정책을 박지 않는다.
-   - 대신 양쪽 끝에 대한 가이드는 제공한다.
-     - source adapter guide: Slack/Plaud/Mail을 어떻게 수집/정규화할지
-     - workflow consumer guide: report/todo/gbrain workflow가 어떤 segment를 어떻게 소비할 수 있는지
-   - 즉 core는 추상화와 routing contract를 제공하고, 실제 사용 정책은 각 workflow/application이 결정한다.
-
-5. **Explicit state over implicit memory**
-   - agent가 “읽었을 것이다”에 기대지 않는다.
-   - pending/processed/skipped/failed 같은 상태를 DB에 명시적으로 남긴다.
-   - skipped도 성공 상태의 한 종류로 취급한다.
-
-6. **Immutable evidence, mutable state**
-   - artifact/segment/output/lineage처럼 근거가 되는 정보는 수정하지 않는다.
-   - cursor/workflow state/draft status처럼 현재 상태를 나타내는 정보만 update를 허용한다.
-   - 재생성/수정은 기존 row 덮어쓰기가 아니라 새 row와 supersede/version으로 표현한다.
-
-7. **Human-approved side effects**
-   - todo 생성, calendar write, Slack/메일 전송, GBrain 저장, 코드 실행 같은 외부 side effect는 기본적으로 proposal/draft까지만 자동화한다.
-   - 실제 write/execute는 승인 단계를 분리한다.
-
-8. **Local-first, inspectable, recoverable, sync-compatible**
-   - v1은 SQLite + filesystem으로 시작한다.
-   - 사람이 직접 파일/DB/CLI로 상태를 확인하고 복구할 수 있어야 한다.
-   - 대형 queue/orchestrator는 필요성이 증명되기 전까지 도입하지 않는다.
-   - 단, local-first가 영구적으로 단일 기기만 의미하지는 않는다. 나중에 sync/cloud/multi-device를 붙일 수 있도록 idempotent하고 replayable한 구조를 유지한다.
-
-9. **Idempotent and replayable**
-   - 같은 입력을 다시 처리해도 중복 산출물이 생기지 않게 한다.
-   - run/input/output/lineage를 남겨 재처리와 디버깅이 가능해야 한다.
-
-10. **Privacy by default**
-    - 민감도는 ingest 시점에 보수적으로 부여한다.
-    - public으로 확인되지 않은 정보는 기본적으로 personal/confidential로 본다.
-    - raw link와 민감 원문은 output에 쉽게 새지 않게 한다.
-    - trust와 sensitivity는 분리한다. 믿을 만한 정보라도 민감할 수 있고, 공개 정보라도 신뢰도가 낮을 수 있다.
-
-11. **Failure-visible**
-    - 실패는 조용히 묻히면 안 된다.
-    - 수집 실패, 권한 부족, routing 실패, workflow 실패, trust conflict, stale data는 상태로 드러나야 한다.
-    - 사용자가 “뭘 놓쳤는지 모르는 상태”가 가장 위험하다.
-
-12. **Minimal core, rich edges**
-    - core는 stream/item/segment/state/run/output/lineage/trust 같은 최소 추상화에 집중한다.
-    - Slack 특수 로직, Plaud 특수 로직, daily report 정책, GBrain 정책은 adapter/guide/workflow edge로 밀어낸다.
-    - core가 비대해지면 agent-neutral과 abstraction router 철학이 깨진다.
-
-13. **Progressive automation**
-    - 자동화는 한 번에 완전 자율로 가지 않는다.
-    - 기본 단계는 `observe → propose/draft → approve → execute`다.
-    - 충분히 검증된 낮은 위험 작업만 trusted rule로 승격한다.
-    - 위험도가 높은 작업일수록 더 명시적인 승인과 더 강한 lineage가 필요하다.
-
-14. **Outcome-measured workflows**
-    - `processed/skipped/failed`는 process guarantee이지 사용자 가치의 전부가 아니다.
-    - draft/report/proposal/code workflow는 사용자가 실제로 더 적게 고치고, 더 빨리 승인하고, 더 자주 활용하는지를 측정해야 한다.
-    - core는 특정 metric을 강제하지 않지만, output feedback과 outcome metrics를 기록할 추상화는 제공한다.
-
-15. **Context bundle as first-class input**
-    - 좋은 output은 좋은 context selection에서 나온다.
-    - workflow가 segment를 직접 흩어 읽는 대신, 목적별로 curated된 context bundle을 만들고 그 bundle을 근거로 output을 생성할 수 있어야 한다.
-    - context bundle은 lineage 이전 단계의 “입력 패키지”이며, 어떤 segment/artifact/trust note를 포함했는지 추적 가능해야 한다.
-
-16. **Portable workflow packages**
-    - workflow 정의는 특정 host나 agent prompt에 갇히지 않아야 한다.
-    - Hermes, Claude Code, Codex, MCP client, local cron이 같은 workflow contract를 읽을 수 있어야 한다.
-    - workflow package는 input contract, output contract, required capabilities, safety policy, guide를 포함한다.
-
-17. **MCP-first integration surface, CLI-also**
-    - CLI는 local-first 운영과 디버깅의 기본 surface다.
-    - MCP는 agent/host가 Continuum을 표준 protocol로 쓰기 위한 1급 통합 채널이다.
-    - v1은 CLI를 먼저 구현하되, API boundary는 MCP server로 노출하기 쉽게 설계한다.
-
-### 2.5.2 철학 위배 검증 체크리스트
-
-새 기능/스키마/worker를 추가할 때마다 아래 질문에 답한다.
-
-| 질문 | 위배 신호 |
-|---|---|
-| 특정 agent 없이는 core가 동작하지 않는가? | agent 종속성 |
-| cron/script로 가능한 일을 LLM에게 맡기고 있는가? | agent 과사용 |
-| output에서 원본 source/person/channel/run과 신뢰도를 추적할 수 있는가? | provenance/trust 누락 |
-| trust와 sensitivity를 섞어서 판단하고 있는가? | trust/privacy 혼동 |
-| core가 source/workflow routing contract를 넘어 특정 사용 정책을 강제하는가? | 추상화/router 역할 침범 |
-| 처리 상태가 DB가 아니라 agent 기억에만 있는가? | implicit state |
-| 근거 데이터가 update/delete 되는가? | immutable evidence 위반 |
-| 실패/권한부족/unrouted/conflict가 사용자에게 보이지 않는가? | silent failure |
-| core에 source/workflow별 특수 정책이 계속 들어오는가? | core 비대화 |
-| 외부 side effect가 승인 없이 실행되는가? | human approval 위반 |
-| 자동화 수준을 검증 없이 바로 execute로 올리는가? | progressive automation 위반 |
-| output 품질/사용자 편집량/승인 여부를 측정하지 않는가? | outcome metric 부재 |
-| workflow가 context bundle 없이 임의로 segment를 흩어 읽는가? | context packaging 부재 |
-| workflow 정의가 특정 agent/host prompt에 갇혀 있는가? | portability 위반 |
-| Continuum 기능이 CLI로만 가능하고 MCP surface로 노출 불가능한가? | MCP 통합성 부족 |
-| 운영자가 CLI/파일/DB로 상태를 점검할 수 없는가? | inspectability 위반 |
-| 같은 입력 재실행 시 중복/오염이 생기는가? | idempotency 위반 |
-| 민감 정보가 기본 허용으로 흐르는가? | privacy 위반 |
+4. **사용자가 실제로 더 나은 결정을 하고 일을 끝낸다**
+   - Continuum은 처리 상태를 남기는 데서 끝나지 않고, output이 실제로 유용했는지 본다.
+   - report는 알아야 할 일을 드러내고, draft는 수정 부담을 줄이고, proposal은 승인 가능한 행동으로 이어져야 한다.
+   - 그래서 process metric과 별도로 accepted/rejected/edited/executed 같은 outcome metric을 남긴다.
 
 ---
 
-## 3. 핵심 원칙
+## 2.5 철학 — 무엇을 믿고 어떤 방향을 선택하는가
 
-### 3.1 source 이름보다 data shape이 중요하다
+여기서 **철학**은 개별 규칙 목록이 아니라, Continuum이 반복해서 선택해야 하는 trade-off의 방향이다.
+철학은 “왜 그런 설계를 택하는가”를 설명하고, 원칙은 그 철학을 구현할 때 지킬 판단 기준이다.
+
+Continuum의 철학은 다음과 같다.
+
+### 2.5.1 맥락은 agent의 기억이 아니라 사용자의 자산이다
+
+Continuum은 특정 agent, 특정 앱, 특정 모델의 memory가 아니다.
+사용자의 맥락은 사용자 소유의 중립 core에 남아야 하며, Hermes, Claude Code, Codex, Gemini, local script, MCP server, custom agent는 모두 그 core를 읽고 쓰는 consumer/producer일 뿐이다.
+
+이 철학이 의미하는 것:
+
+- agent가 바뀌어도 맥락, 처리 상태, lineage, trust/sensitivity 평가는 유지된다.
+- core는 특정 host의 prompt나 memory 기능에 종속되지 않는다.
+- CLI와 MCP는 surface일 뿐이고, 실제 판단과 상태는 공통 domain/service layer에 남는다.
+
+### 2.5.2 기록보다 해석이 먼저가 아니라, 근거 있는 해석이 먼저다
+
+Continuum은 “좋은 요약”보다 “근거를 설명할 수 있는 요약”을 우선한다.
+모든 output은 어떤 source에서 왔고, 어떤 actor와 관련 있고, 어떤 segment/context bundle을 근거로 삼았는지 설명 가능해야 한다.
+
+이 철학이 의미하는 것:
+
+- provenance, lineage, trust, sensitivity는 부가기능이 아니라 core다.
+- 모순된 정보는 덮어쓰지 않고 conflict로 남긴다.
+- 최신 정보가 항상 정답은 아니며, 더 강한 근거가 우선될 수 있다.
+
+### 2.5.3 자동화는 사람을 대체하기보다 승인 가능한 선택지를 만든다
+
+Continuum의 기본 자동화 단계는 `observe → propose/draft → approve → execute`다.
+외부 시스템에 영향을 주는 write/execute는 처음부터 완전 자동화하지 않는다.
+
+이 철학이 의미하는 것:
+
+- todo 생성, calendar write, Slack/메일 전송, GBrain 저장, 코드 실행은 기본적으로 proposal/draft를 먼저 만든다.
+- 충분히 검증된 낮은 위험 작업만 trusted rule로 승격한다.
+- 위험도가 높을수록 더 명시적인 승인과 더 강한 lineage가 필요하다.
+
+### 2.5.4 core는 얇고 안정적이어야 하며, 풍부함은 edge에서 나온다
+
+Continuum core는 모든 제품 정책을 품은 거대한 앱이 아니다.
+core는 맥락을 수집·정규화·라우팅·추적하는 substrate이고, 실제 사용 정책은 source adapter와 workflow/application edge에서 발전한다.
+
+이 철학이 의미하는 것:
+
+- Slack/Plaud/Mail/Calendar별 특수 정책은 adapter/guide로 밀어낸다.
+- daily report, diary, todo planner, gbrain fanout의 제품 판단은 workflow edge가 담당한다.
+- core가 비대해지면 agent-neutral, inspectable, portable한 성격이 깨진다.
+
+### 2.5.5 로컬에서 설명 가능해야 확장도 가능하다
+
+Continuum은 처음부터 분산 orchestration이나 외부 queue를 전제로 하지 않는다.
+먼저 local-first, inspectable, recoverable하게 만들고, 그 위에 sync/cloud/multi-device를 붙일 수 있는 구조를 유지한다.
+
+이 철학이 의미하는 것:
+
+- 사람이 SQLite, filesystem, CLI로 상태를 점검하고 복구할 수 있어야 한다.
+- 재처리와 디버깅이 가능하도록 run/input/output/lineage를 남긴다.
+- protocol surface는 MCP를 1급 지원하되, 운영 가능한 CLI를 버리지 않는다.
+
+---
+
+## 3. 원칙 — 설계와 구현에서 지킬 판단 기준
+
+여기서 **원칙**은 철학을 실제 설계로 옮길 때 적용하는 구체적 판단 기준이다.
+원칙은 “좋은 말”이 아니라 스키마, worker, CLI/MCP, workflow 구현에서 위반 여부를 판정할 수 있어야 한다.
+
+### 3.1 데이터 모델링 원칙
+
+#### 3.1.1 Source 이름보다 data shape을 먼저 본다
 
 “Slack 전용”, “Plaud 전용” 모델을 만들지 않는다. 대신 source item의 **primary shape**와 **sync behavior**를 분리해 추상화한다.
 
-### 3.1.1 Shape는 MECE하게 정의한다
+##### Shape는 MECE하게 정의한다
 
 Shape는 source item의 “주된 의미” 기준으로 하나만 선택한다. 시간이 지나며 child가 추가되는지, 수정되는지, version이 생기는지는 shape가 아니라 `sync_behavior`로 표현한다.
 
@@ -222,7 +157,7 @@ Shape는 source item의 “주된 의미” 기준으로 하나만 선택한다.
 | CSV export | `dataset` | replace_snapshot 또는 versioned |
 | Slack unread list | `snapshot` | point_in_time |
 
-### 3.1.2 Sync behavior는 shape와 분리한다
+##### Sync behavior는 shape와 분리한다
 
 같은 shape라도 동기화 방식은 다를 수 있다. 반대로 다른 shape라도 같은 sync behavior를 공유할 수 있다.
 
@@ -247,16 +182,104 @@ Google Doc = document + versioned
 Plaud recording = recording + extraction_pending
 ```
 
-### 3.2 v1 운영 원칙
 
-외부 리뷰 결과를 반영해 v1은 의도적으로 좁게 시작한다.
 
-1. **Polling only** — push/webhook은 v2로 미룬다.
+#### 3.1.2 원본/근거는 immutable, 상태는 mutable로 분리한다
+
+- artifact/segment/output/lineage는 덮어쓰지 않는다.
+- cursor/workflow state/draft status처럼 현재 상태를 나타내는 값만 update한다.
+- 수정/재생성은 새 row와 supersede/version으로 표현한다.
+
+#### 3.1.3 출처, 신뢰도, 민감도는 처음부터 함께 저장한다
+
+- provenance는 나중에 붙이는 설명이 아니라 데이터의 일부다.
+- sensitivity는 LLM 판단 이전 ingest 시점에 보수적으로 부여한다.
+- trust와 sensitivity는 분리한다. 믿을 만한 정보라도 민감할 수 있고, 공개 정보라도 신뢰도가 낮을 수 있다.
+
+#### 3.1.4 derived output은 기본적으로 다시 routing input이 아니다
+
+- report/diary/todo proposal이 다시 입력으로 순환하면 맥락 오염과 중복 판단이 생긴다.
+- output을 재입력으로 쓰려면 명시적 workflow rule과 lineage가 필요하다.
+
+### 3.2 처리/운영 원칙
+
+1. **Deterministic-first**
+   - cursor, dedupe, hash, schema migration, status update, routing materialization처럼 결정론적으로 가능한 일은 deterministic worker가 한다.
+   - LLM/agent는 의미 판단, 요약, 초안 작성처럼 비결정론적 판단이 필요한 곳에만 쓴다.
+
+2. **Explicit state over implicit memory**
+   - agent가 “읽었을 것이다”에 기대지 않는다.
+   - pending/processed/skipped/failed를 DB에 남긴다.
+   - skipped도 정상적인 완료 상태다.
+
+3. **Failure-visible**
+   - 수집 실패, 권한 부족, routing 실패, workflow 실패, trust conflict, stale data는 조용히 묻히면 안 된다.
+   - unrouted segment와 failed workflow state는 doctor/stats에서 보여야 한다.
+
+4. **Idempotent and replayable**
+   - 같은 입력을 다시 처리해도 중복 산출물이 생기지 않아야 한다.
+   - run/input/output/lineage를 남겨 재처리와 디버깅이 가능해야 한다.
+
+5. **Context bundle을 output 생성 입력의 단위로 삼는다**
+   - output 생성자가 어떤 segment/artifact/trust/conflict/preference를 참고했는지 bundle로 남긴다.
+   - “agent가 알아서 읽은 것”은 재현 가능한 입력이 아니다.
+
+6. **Outcome metric을 process metric과 분리한다**
+   - `processed/skipped/failed`는 누락 방지 metric이다.
+   - accepted/rejected/edited/executed/time_to_approval 같은 값은 사용자 체감 품질 metric이다.
+   - 둘 중 하나만 있으면 시스템 품질을 착각한다.
+
+### 3.3 인터페이스/확장 원칙
+
+1. **Core logic은 CLI/MCP 밖에 둔다**
+   - CLI와 MCP는 같은 service/domain layer를 호출한다.
+   - 어느 한 surface에만 business logic이 있으면 agent-neutral이 깨진다.
+
+2. **MCP는 agent 통합의 1급 surface다**
+   - 외부 agent가 Continuum을 subprocess hack으로만 쓰게 만들지 않는다.
+   - MCP tool은 초기에는 read-only + output/draft/context bundle 제출 중심으로 시작한다.
+   - write/execute성 tool은 approval state를 요구한다.
+
+3. **Workflow는 portable package로 정의한다**
+   - workflow 정의를 특정 host의 prompt나 cron job에 가두지 않는다.
+   - input contract, output contract, required capability, safety policy, guide를 포함한다.
+   - Hermes, Claude Code, Codex, MCP client, local script가 같은 workflow package를 각자 실행할 수 있어야 한다.
+
+### 3.4 v1 범위 원칙
+
+v1은 의도적으로 좁게 시작한다.
+
+1. **Polling only** — push/webhook runtime은 v2로 미룬다.
 2. **Single-writer** — 여러 agent가 동시에 DB에 쓰지 않는다.
 3. **Immutable segment** — segment 내용 변경 시 새 segment를 만들고 기존 segment를 supersede한다.
-4. **Default sensitivity at ingest** — 민감도는 LLM 이전, ingest 시점에 source 기본값으로 부여한다.
-5. **Derived output is not routing input by default** — report/diary/todo proposal이 다시 입력으로 순환하지 않게 한다.
+4. **Default sensitivity at ingest** — 민감도는 ingest 시점에 source 기본값으로 부여한다.
+5. **Derived output is not routing input by default** — output 재순환을 기본 차단한다.
 6. **Unrouted is visible** — routing되지 않은 segment는 audit 대상이다.
+7. **Proposal before side effect** — 외부 write/execute는 proposal/draft와 approval state를 거친다.
+
+### 3.5 원칙 위배 체크리스트
+
+새 기능/스키마/worker를 추가할 때마다 아래 질문에 답한다.
+
+| 질문 | 위배 신호 |
+|---|---|
+| 이 기능이 어떤 사용자 가치를 높이는지 설명할 수 있는가? | 가치 없는 구현 취향 |
+| 특정 agent 없이는 core가 동작하지 않는가? | agent 종속성 |
+| CLI 또는 MCP 한쪽에만 business logic이 있는가? | surface 종속성 |
+| source별 특수 정책이 core schema/worker로 들어오는가? | core 비대화 |
+| output에서 원본 source/person/channel/run/context bundle을 추적할 수 있는가? | provenance/lineage 누락 |
+| trust와 sensitivity를 섞어서 판단하고 있는가? | trust/privacy 혼동 |
+| 처리 상태가 DB가 아니라 agent 기억에만 있는가? | implicit state |
+| 근거 데이터가 update/delete 되는가? | immutable evidence 위반 |
+| 실패/권한부족/unrouted/conflict가 사용자에게 보이지 않는가? | silent failure |
+| 외부 side effect가 승인 없이 실행되는가? | human approval 위반 |
+| 자동화 수준을 검증 없이 바로 execute로 올리는가? | progressive automation 위반 |
+| 운영자가 CLI/파일/DB로 상태를 점검할 수 없는가? | inspectability 위반 |
+| 같은 입력 재실행 시 중복/오염이 생기는가? | idempotency 위반 |
+| 민감 정보가 기본 허용으로 흐르는가? | privacy 위반 |
+| output이 실제로 채택/수정/폐기/실행됐는지 측정하지 않는가? | outcome metric 누락 |
+| output 생성 입력이 명시적 context bundle 없이 agent 암묵 상태에만 남는가? | context packaging 누락 |
+| workflow 정의가 특정 host/prompt/cron에만 갇혀 있는가? | portability 위반 |
 
 ---
 
