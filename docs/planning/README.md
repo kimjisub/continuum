@@ -18,4 +18,4 @@ The original long architecture plan is split into ordered planning documents.
 
 ## Source-of-truth rule
 
-Use these files for future planning edits. `docs/continuum-architecture-plan.md` is kept only as a migration pointer.
+Use these files as the source of truth for future planning edits.

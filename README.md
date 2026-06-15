@@ -104,5 +104,3 @@ Planning/bootstrap phase. Start with:
 ```text
 docs/planning/README.md
 ```
-
-The legacy aggregate plan at `docs/continuum-architecture-plan.md` now points to the split planning docs.
