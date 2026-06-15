@@ -160,22 +160,63 @@ Continuum은 기능보다 먼저 지켜야 할 철학이 있다. 이후 설계/�
 
 ### 3.1 source 이름보다 data shape이 중요하다
 
-“Slack 전용”, “Plaud 전용” 모델을 만들지 않는다. 대신 데이터의 형태를 추상화한다.
+“Slack 전용”, “Plaud 전용” 모델을 만들지 않는다. 대신 source item의 **primary shape**와 **sync behavior**를 분리해 추상화한다.
 
-| Shape | 예시 | 처리 방식 |
-|---|---|---|
-| `append_stream` | Slack channel, DM, Discord, Telegram | cursor + entry 단위 ingest |
-| `recording` | Plaud 음성메모, 회의 녹음 | artifact + transcript segment |
-| `message_thread` | Mail thread, Slack thread | thread root + replies |
-| `event` | Calendar event, meeting | start/end time 중심 |
-| `task` | Reminder, todo | 상태 변화 중심 |
-| `document` | PDF, note, doc | version/hash 중심 |
-| `snapshot` | Slack unread summary, inbox listing | 관측 상태 저장, 직접 처리 단위는 아님 |
+### 3.1.1 Shape는 MECE하게 정의한다
+
+Shape는 source item의 “주된 의미” 기준으로 하나만 선택한다. 시간이 지나며 child가 추가되는지, 수정되는지, version이 생기는지는 shape가 아니라 `sync_behavior`로 표현한다.
+
+| Shape | 정의 | 예시 | 기본 처리 |
+|---|---|---|---|
+| `append_entry` | 시간순 stream에 추가되는 독립 entry | Slack channel message, Discord message, Telegram message, log line, webhook event | stream cursor + item/segment 생성 |
+| `conversation` | 하나의 대화/논의 단위. root와 replies/participants를 가질 수 있음 | Slack thread, Discord thread, Telegram topic, Gmail thread, GitHub issue discussion, Linear issue comments | aggregate item + child sync + summary segment |
+| `recording` | 음성/영상처럼 transcript/extraction이 필요한 media record | Plaud recording, Zoom recording, Teams recording, voice memo, call recording | artifact 저장 + transcript/summary segment |
+| `scheduled_event` | 시작/종료 시간과 참석자가 있는 일정/회의 객체 | Calendar event, meeting invite, interview schedule, webinar, reservation | time fields + attendees + update sync |
+| `task` | 완료/기한/우선순위/상태 전이가 있는 actionable object | Apple Reminder, todo, Linear issue, GitHub issue, Jira ticket, Asana task | state tracking + due/status segment |
+| `document` | 사람이 읽는 본문 중심 문서 | PDF, Google Doc, Notion page, Markdown note, proposal doc, email attachment doc | artifact + body/summary segments + version/hash |
+| `dataset` | row/record 집합 또는 structured data dump | CSV, spreadsheet, Airtable export, JSONL, database query result | artifact + schema/profile/row summary segments |
+| `snapshot` | 특정 시점의 관측 상태. 그 자체가 처리 단위라기보다 상태 사진 | unread inbox listing, Slack channel list, file tree, system status, search result page | artifact 저장 + 필요 시 source_health/summary segment |
+| `external_reference` | 원문은 외부에 있고 Continuum에는 포인터/metadata만 있는 객체 | URL bookmark, GitHub PR link, Linear project link, Drive file pointer, web article URL | metadata + fetch/resolve 상태 관리 |
 
 `report`, `diary`, `GBrain update`, `todo proposal`, `draft` 같은 산출물은 source shape가 아니라 **output**으로 관리한다.
 
-즉 Slack은 Slack이라서 특별한 것이 아니라, **append_stream + message_thread** 조합이다.
-Plaud는 **recording + transcript segments**다.
+예:
+
+| Source object | Shape | sync_behavior 예 |
+|---|---|---|
+| Slack channel message | `append_entry` | append-only + watermark |
+| Slack thread | `conversation` | children_grow |
+| Gmail thread | `conversation` | children_grow |
+| Calendar event | `scheduled_event` | mutable_record |
+| Plaud recording | `recording` | extraction_pending |
+| Google Doc | `document` | versioned |
+| CSV export | `dataset` | replace_snapshot 또는 versioned |
+| Slack unread list | `snapshot` | point_in_time |
+
+### 3.1.2 Sync behavior는 shape와 분리한다
+
+같은 shape라도 동기화 방식은 다를 수 있다. 반대로 다른 shape라도 같은 sync behavior를 공유할 수 있다.
+
+| Sync behavior | 의미 | 예시 | 상태 저장 |
+|---|---|---|---|
+| `append_only` | 새 entry가 뒤에만 붙음 | channel timeline, log stream | `stream_cursors` |
+| `watermarked_append` | 늦게 도착한 entry를 잡기 위해 최근 구간 재스캔 | Slack/Discord channel | `stream_cursors` + watermark |
+| `children_grow` | 기존 item 아래 child/reply/comment가 추가됨 | Slack thread, Gmail thread, GitHub issue comments | `item_sync_state` |
+| `mutable_record` | 같은 외부 id의 필드가 바뀜 | calendar event time change, task status change | item update + 새 segment/supersede |
+| `versioned` | 새 버전이 생김 | Google Doc revision, PDF update, code file snapshot | artifact/segment 새 버전 |
+| `replace_snapshot` | 매번 전체 상태 사진을 다시 찍음 | inbox listing, channel list, search results | snapshot artifact |
+| `extraction_pending` | 원본 수집 후 transcript/OCR/parse가 뒤따름 | Plaud, PDF OCR, meeting recording | artifact + normalize run |
+
+이렇게 나누면 Slack thread는 Slack 전용 모델이 아니라 `conversation + children_grow`의 한 예시가 된다.
+
+```text
+Slack thread = conversation + children_grow
+Gmail thread = conversation + children_grow
+GitHub issue discussion = conversation + children_grow
+Calendar event = scheduled_event + mutable_record
+Google Doc = document + versioned
+Plaud recording = recording + extraction_pending
+```
 
 ### 3.2 v1 운영 원칙
 
@@ -686,14 +727,14 @@ CREATE TABLE draft_versions (
 
 ### 6.15 Item sync state
 
-Slack thread처럼 item 자체가 시간이 지나며 자라는 aggregate가 있다.
+일부 source item은 시간이 지나며 child/update/version이 추가되는 aggregate다.
 
-channel cursor는 새 root message를 찾는 데 필요하지만, thread reply 증가를 추적하기에는 부족하다. 그래서 item별 sync state를 둔다.
+stream cursor는 새 top-level item을 찾는 데 필요하지만, 이미 발견한 item 내부의 child 증가나 update/version 변화까지 추적하기에는 부족하다. 그래서 item별 sync state를 둔다.
 
 ```sql
 CREATE TABLE item_sync_state (
   item_id INTEGER NOT NULL,
-  sync_kind TEXT NOT NULL, -- thread_replies | file_children | calendar_updates | document_versions
+  sync_kind TEXT NOT NULL, -- children_grow | mutable_record | versioned | extraction_pending
   cursor_value TEXT,
   count_seen INTEGER,
   latest_child_external_id TEXT,
@@ -710,11 +751,33 @@ CREATE TABLE item_sync_state (
 예:
 
 ```text
-Slack thread item
-  sync_kind = thread_replies
+conversation item
+  sync_kind = children_grow
+  cursor_value = latest_child_cursor
+  count_seen = child_count_seen
+  latest_child_occurred_at = latest child timestamp
+```
+
+Source-specific mapping examples:
+
+```text
+Slack thread
+  sync_kind = children_grow
   cursor_value = latest_reply_ts
   count_seen = reply_count_seen
-  latest_child_occurred_at = latest reply ts
+
+Gmail thread
+  sync_kind = children_grow
+  cursor_value = latest_message_id or internal_date
+  count_seen = message_count_seen
+
+Google Doc
+  sync_kind = versioned
+  cursor_value = latest_revision_id
+
+Calendar event
+  sync_kind = mutable_record
+  cursor_value = updated_at / etag
 ```
 
 규칙:
@@ -834,7 +897,7 @@ thread replies = item-level mutable aggregate
 
 ```text
 stream.key = slack:alpaon:#synapus
-shape = append_stream
+shape = append_entry
 stream_cursor = latest_channel_ts
 ```
 
@@ -878,9 +941,9 @@ thread_summary_v2 = reply 1~10 기준
 
 thread가 자라면 기존 summary를 수정하지 않고 새 summary를 만들며, 기존 summary는 superseded 처리한다.
 
-### 7.4 thread reply sync
+### 7.4 conversation child sync 예시
 
-Thread는 channel timeline cursor만으로는 충분하지 않다.
+Conversation은 stream cursor만으로는 충분하지 않다. Slack thread는 `conversation + children_grow`의 대표 예시다.
 
 예:
 
@@ -892,7 +955,7 @@ Thread는 channel timeline cursor만으로는 충분하지 않다.
 처리 방식:
 
 1. channel timeline 수집에서 thread root의 `reply_count` 또는 `latest_reply` 변화를 감지한다.
-2. `item_sync_state(item_id=T, sync_kind=thread_replies)`를 읽는다.
+2. `item_sync_state(item_id=T, sync_kind=children_grow)`를 읽는다.
 3. `reply_count_seen` 또는 `latest_reply_ts`가 증가했으면 Slack conversations.replies를 호출한다.
 4. 기존 reply 1~5는 `external_id` unique constraint로 dedupe한다.
 5. 새 reply 6~10만 item/segment로 추가한다.
@@ -1026,7 +1089,7 @@ continuum stats
 
 ```bash
 continuum streams list
-continuum streams add slack:alpaon:#synapus --shape append_stream --connector slack
+continuum streams add slack:alpaon:#synapus --shape append_entry --connector slack
 continuum streams show slack:alpaon:#synapus
 ```
 
@@ -1207,7 +1270,7 @@ CREATE TABLE routing_rules (
 ```json
 {
   "segment_types": ["summary", "action_candidate"],
-  "shapes": ["recording", "message_thread"],
+  "shapes": ["recording", "conversation"],
   "min_confidence": 0.6
 }
 ```
