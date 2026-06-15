@@ -99,8 +99,10 @@ Runtime contains local state, collected data, generated reports, drafts, logs, a
 
 ## Current status
 
-Planning/bootstrap phase. See:
+Planning/bootstrap phase. Start with:
 
 ```text
-docs/continuum-architecture-plan.md
+docs/planning/README.md
 ```
+
+The legacy aggregate plan at `docs/continuum-architecture-plan.md` now points to the split planning docs.
