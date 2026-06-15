@@ -21,6 +21,38 @@ Sources → Continuum Core → Workflows
 3. **Keep context user-owned and agent-neutral**
    - Context belongs to the user, not to a specific agent runtime.
 
+## Target user experience
+
+End users should not need to clone this repository.
+
+```bash
+uv tool install continuum
+continuum setup
+continuum doctor
+
+# Agent integration, depending on host:
+hermes skills install continuum
+# or
+hermes mcp add continuum --command "continuum mcp serve"
+```
+
+Repository clone is for contributors only:
+
+```bash
+git clone https://github.com/kimjisub/continuum
+cd continuum
+uv sync
+uv run continuum
+```
+
+## Runtime / daemon model
+
+Continuum is primarily a **CLI + local runtime DB**. It should not require an always-on daemon for basic use.
+
+- **Default v1:** no daemon. Cron/Hermes/shell invokes `continuum collect`, `continuum route`, `continuum workflows ...` as short-lived commands.
+- **Optional daemon later:** `continuum daemon` may run local scheduling/watchers, queue workers, and health checks.
+- **MCP server:** `continuum mcp serve` is a long-running process, but only needed when an agent host wants MCP tools.
+
 ## Repository layout
 
 ```text

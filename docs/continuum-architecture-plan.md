@@ -1249,17 +1249,19 @@ Continuum은 “CLI를 설치하고 skill 파일 하나를 등록하면 끝나�
 
 ```text
 1. 설치
-   uv tool install -e ~/Github/kimjisub/continuum
-   # 또는 repo 안에서 uv run continuum ...
+   uv tool install continuum
+   # 또는 OS/패키징 방식에 따라 pipx/brew/pkg installer 사용
 
-2. runtime 초기화
-   continuum init --runtime ~/Github/kimjisub/continuum/runtime
+2. 온보딩
+   continuum setup
+   # runtime path, DB 초기화, connector credential, 기본 workflow, agent integration을 안내
 
-3. source 등록
+3. 상태 점검
+   continuum doctor
+
+4. source 등록/수집/정규화
    continuum streams add slack:alpaon:#synapus --shape append_entry --connector slack
    continuum streams add plaud:account:default --shape recording --connector plaud
-
-4. 수집/정규화
    continuum collect slack --workspace alpaon
    continuum collect plaud
    continuum normalize --pending
@@ -1280,6 +1282,15 @@ Continuum은 “CLI를 설치하고 skill 파일 하나를 등록하면 끝나�
 
 8. feedback 기록
    continuum outputs feedback <output_id> accepted|edited|rejected|executed
+```
+
+개발자만 repo를 clone한다.
+
+```bash
+git clone https://github.com/kimjisub/continuum
+cd continuum
+uv sync
+uv run continuum
 ```
 
 ### 9.0.3 Hermes skill은 어디에 쓰이나
@@ -1326,7 +1337,44 @@ Hermes/Claude/Codex
 
 CLI와 MCP는 서로 다른 구현이 아니라 같은 core service layer의 두 surface여야 한다.
 
-### 9.0.5 현재 구현 상태
+### 9.0.5 Daemon / background process 모델
+
+기본 v1은 **always-on daemon을 요구하지 않는다.** Continuum의 기본 단위는 짧게 실행되고 종료되는 CLI command다.
+
+```text
+cron / Hermes cron / launchd / shell
+  → continuum collect ...
+  → continuum route ...
+  → continuum workflows pending ...
+  → continuum outputs create ...
+  → exit
+```
+
+이 방식을 기본값으로 두는 이유:
+
+- local-first와 inspectability가 좋다.
+- 죽어 있는 daemon 때문에 수집이 멈추는 failure mode를 줄인다.
+- 사용자는 `continuum doctor`, DB, log 파일로 상태를 직접 확인할 수 있다.
+- v1 single-writer 원칙과 잘 맞는다.
+
+다만 장기적으로는 두 종류의 long-running process가 있을 수 있다.
+
+| Process | 명령 | 역할 | 필수 여부 |
+|---|---|---|---|
+| MCP server | `continuum mcp serve` | 외부 agent/host에 MCP tools 노출 | MCP 연동 시 필요 |
+| Continuum daemon | `continuum daemon` | local scheduler, file watcher, queue worker, health monitor | 선택 사항 / v2 |
+
+따라서 설치 후 기본 UX는 daemon을 켜는 것이 아니라:
+
+```bash
+continuum setup
+continuum doctor
+# 필요하면 Hermes cron/OS cron에 collect/route/workflow command 등록
+```
+
+MCP 연동을 선택한 경우에만 host가 `continuum mcp serve`를 background process로 관리한다. 예를 들어 Hermes MCP 설정, Claude Desktop MCP 설정, launchd/systemd user service가 이 프로세스를 띄울 수 있다.
+
+### 9.0.6 현재 구현 상태
 
 현재 repo의 CLI는 bootstrap 단계다. `pyproject.toml`에 `continuum = "continuum.cli:main"` entry point는 있지만, `src/continuum/cli.py`는 아직 planning/bootstrap 메시지만 출력한다.
 
