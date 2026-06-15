@@ -1,0 +1,19 @@
+[project]
+name = "continuum"
+version = "0.1.0"
+description = "Agent-neutral context router and evidence ledger"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "김지섭" }]
+license = { text = "MIT" }
+
+[project.scripts]
+continuum = "continuum.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
