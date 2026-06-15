@@ -1229,6 +1229,128 @@ workflow는 장기적으로 polling과 push trigger를 둘 다 가질 수 있다
 
 ---
 
+## 9. Runtime 사용 모델
+
+Continuum은 “CLI를 설치하고 skill 파일 하나를 등록하면 끝나는” 구조가 아니다. CLI, runtime DB, workflow package/skill, agent/MCP가 각각 다른 역할을 맡는다.
+
+### 9.0.1 역할 분리
+
+| 구성요소 | 역할 | 필수 여부 |
+|---|---|---|
+| `continuum` CLI | runtime DB 초기화, source 수집, workflow queue 조회/처리, output/lineage/feedback 기록 | v1 필수 |
+| runtime DB/files | `runtime/continuum.db`, artifacts, outputs, logs. 실제 상태와 근거의 SSOT | 필수 |
+| workflow package | workflow의 input/output contract, required capabilities, safety policy, guide | workflow 실행 시 필수 |
+| Hermes skill | Hermes가 특정 workflow package를 어떻게 사용할지 알려주는 host adapter/사용법 문서 | Hermes 연동 시 필요 |
+| MCP server | Claude Desktop, Hermes MCP client, 다른 agent가 Continuum을 표준 tool surface로 쓰는 통합 채널 | v1.5/v2 목표 |
+
+즉 skill은 “agent에게 사용법을 가르치는 파일”이지, Continuum runtime 자체가 아니다. 실제 상태 변화는 CLI/MCP가 같은 core service layer를 통해 DB에 기록해야 한다.
+
+### 9.0.2 v1 실제 사용 흐름
+
+```text
+1. 설치
+   uv tool install -e ~/Github/kimjisub/continuum
+   # 또는 repo 안에서 uv run continuum ...
+
+2. runtime 초기화
+   continuum init --runtime ~/Github/kimjisub/continuum/runtime
+
+3. source 등록
+   continuum streams add slack:alpaon:#synapus --shape append_entry --connector slack
+   continuum streams add plaud:account:default --shape recording --connector plaud
+
+4. 수집/정규화
+   continuum collect slack --workspace alpaon
+   continuum collect plaud
+   continuum normalize --pending
+
+5. routing materialize
+   continuum route --workflow morning_report
+   continuum workflows pending morning_report
+
+6. agent/workflow 실행
+   Hermes skill 또는 workflow package가 pending segment를 읽고 context bundle을 만든다.
+   agent는 report/draft/proposal을 생성한다.
+
+7. 결과 기록
+   continuum bundles create ...
+   continuum outputs create ...
+   continuum lineage add ...
+   continuum workflows mark morning_report <segment_id> processed
+
+8. feedback 기록
+   continuum outputs feedback <output_id> accepted|edited|rejected|executed
+```
+
+### 9.0.3 Hermes skill은 어디에 쓰이나
+
+Hermes skill은 다음을 담는다.
+
+```text
+name: continuum-morning-report
+what it does: Continuum pending segments로 morning report 생성
+commands it may call:
+  - continuum workflows pending morning_report
+  - continuum bundles create ...
+  - continuum outputs create ...
+  - continuum lineage add ...
+  - continuum outputs feedback ...
+safety:
+  - external side effect는 proposal/draft까지만
+  - approval 전 calendar/reminder/mail/slack write 금지
+```
+
+Hermes runtime에서는 이 skill을 로드한 뒤 CLI를 호출해 Continuum DB를 읽고 쓴다. 따라서 “skill 등록”은 사용 가능 조건 중 하나지만, 충분조건은 아니다.
+
+필요한 것:
+
+1. `continuum` CLI가 설치되어 PATH에서 실행 가능해야 한다.
+2. runtime DB가 초기화되어 있어야 한다.
+3. source connector 설정과 credentials가 있어야 한다.
+4. workflow가 DB에 등록되어 있어야 한다.
+5. Hermes skill 또는 MCP tool이 해당 workflow contract를 알고 있어야 한다.
+
+### 9.0.4 MCP가 붙으면 달라지는 점
+
+MCP가 생기면 Hermes skill이 직접 CLI 명령을 조립하는 대신, tool call로 Continuum을 쓴다.
+
+```text
+Hermes/Claude/Codex
+  → MCP tool: continuum_list_pending
+  → MCP tool: continuum_create_context_bundle
+  → MCP tool: continuum_submit_output
+  → MCP tool: continuum_record_feedback
+  → Continuum core service
+  → runtime DB/files
+```
+
+CLI와 MCP는 서로 다른 구현이 아니라 같은 core service layer의 두 surface여야 한다.
+
+### 9.0.5 현재 구현 상태
+
+현재 repo의 CLI는 bootstrap 단계다. `pyproject.toml`에 `continuum = "continuum.cli:main"` entry point는 있지만, `src/continuum/cli.py`는 아직 planning/bootstrap 메시지만 출력한다.
+
+따라서 현재 당장 가능한 것은:
+
+```bash
+cd ~/Github/kimjisub/continuum
+uv sync
+uv run continuum
+```
+
+현재 당장 불가능한 것은:
+
+```bash
+continuum init
+continuum collect ...
+continuum workflows pending ...
+continuum outputs create ...
+```
+
+이 명령들은 설계상 필요한 runtime surface이고, 다음 구현 단계에서 만들어야 한다.
+
+---
+
 ## 9. CLI 인터페이스
 
 CLI 이름 제안: `continuum`
