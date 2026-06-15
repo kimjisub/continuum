@@ -2,9 +2,11 @@
 
 > Part of the Continuum planning docs. See [planning index](README.md).
 
-## 10. 사용사례 검토
+## Use Cases and Guarantees
 
-### 10.1 일일 보고
+### 10. 사용사례 검토
+
+#### 10.1 일일 보고
 
 - 대상: 전날 발생한 모든 relevant segment
 - 처리 기준: `occurred_at` 기준 date range
@@ -17,7 +19,7 @@
 
 ---
 
-### 10.2 아침 보고
+#### 10.2 아침 보고
 
 - 대상: 오늘 일정, 미처리 task, 밤사이 새 메시지/메일/녹음
 - 처리 기준: since last morning report + today calendar
@@ -29,7 +31,7 @@
 
 ---
 
-### 10.3 일기 작성
+#### 10.3 일기 작성
 
 - 대상: Plaud 독백, 하루 회고, 개인적 Slack/세션 요약
 - 강한 필터 필요: 모든 업무 메시지를 일기에 넣으면 안 됨
@@ -41,7 +43,7 @@
 
 ---
 
-### 10.4 Todo / Calendar 조율
+#### 10.4 Todo / Calendar 조율
 
 - 대상: action_candidate segment
 - output: proposed todo/calendar event
@@ -64,7 +66,7 @@ draft(code, py): 자동 정리 스크립트 초안
 
 ---
 
-### 10.5 GBrain 맥락 저장
+#### 10.5 GBrain 맥락 저장
 
 - 대상: durable fact, relationship, decision, timeline event
 - raw를 전부 넣으면 안 됨
@@ -76,9 +78,9 @@ draft(code, py): 자동 정리 스크립트 초안
 
 ---
 
-## 11. 아키텍처 보강
+### 11. 아키텍처 보강
 
-### 11.1 Continuum이 보장하는 것과 보장하지 않는 것
+#### 11.1 Continuum이 보장하는 것과 보장하지 않는 것
 
 Continuum의 핵심 보장은 “모든 workflow가 모든 데이터를 의미 있게 처리한다”가 아니다.
 
@@ -105,7 +107,7 @@ Continuum이 보장하지 않는 것:
 
 ---
 
-### 11.2 Segment routing
+#### 11.2 Segment routing
 
 모든 segment를 모든 workflow에 넣으면 소음이 폭발한다. 초기 구현부터 routing layer가 필요하다.
 
@@ -136,7 +138,7 @@ routing 결과는 `workflow_segment_state`에 `pending`으로 materialize한다.
 
 ---
 
-### 11.3 Claim / lease 모델
+#### 11.3 Claim / lease 모델
 
 Claim/lease는 multi-agent 동시 처리와 long-running worker를 위한 필수 queue capability다. 초기에는 single-writer 운영으로 시작할 수 있지만, 상태 모델과 CLI는 claim/lease를 포함한다.
 
@@ -163,7 +165,7 @@ continuum workflows skip daily_report <segment_id> --reason not_relevant
 
 ---
 
-### 11.4 Normalization과 enrichment를 분리
+#### 11.4 Normalization과 enrichment를 분리
 
 collector가 바로 “중요한 일”을 판단하면 안 된다.
 
@@ -190,7 +192,7 @@ morning_report / diary / gbrain_fanout / todo_planner
 
 ---
 
-### 11.5 Segment type 표준
+#### 11.5 Segment type 표준
 
 기본 segment type:
 
@@ -214,7 +216,7 @@ candidate segment type:
 
 ---
 
-### 11.6 Confidence와 sensitivity
+#### 11.6 Confidence와 sensitivity
 
 workflow routing에는 중요도뿐 아니라 민감도도 필요하다.
 
@@ -234,7 +236,7 @@ ALTER TABLE segments ADD COLUMN sensitivity TEXT; -- public | personal | confide
 
 ---
 
-### 11.7 Push event inbox
+#### 11.7 Push event inbox
 
 push는 즉시 처리하되, 먼저 raw event를 안전하게 저장한다.
 
@@ -262,7 +264,7 @@ webhook → inbound_events(received) → connector adapter → item/segment → 
 
 ---
 
-### 11.8 가능한 use-case / 어려운 use-case
+#### 11.8 가능한 use-case / 어려운 use-case
 
 가능한 use-case:
 
@@ -291,7 +293,7 @@ webhook → inbound_events(received) → connector adapter → item/segment → 
 
 ---
 
-### 11.9 반드시 피할 함정
+#### 11.9 반드시 피할 함정
 
 1. source별 전용 테이블을 많이 만들지 않는다.
 2. workflow가 raw 파일을 직접 스캔하게 두지 않는다.

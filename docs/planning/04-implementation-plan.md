@@ -1,12 +1,14 @@
-# Implementation, Scope, and Success Criteria
+# Implementation Plan and Success Criteria
 
 > Part of the Continuum planning docs. See [planning index](README.md).
 
-## 12. 구현 순서
+## Implementation, Scope, and Success Criteria
+
+### 12. 구현 순서
 
 Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 안정적인 순서로 쌓기 위해 phase를 나눈다.
 
-### Phase 1 — Ledger core + CLI foundation
+#### Phase 1 — Ledger core + CLI foundation
 
 1. `continuum.db` 스키마 생성
 2. `schema_migrations` 도입
@@ -15,7 +17,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 5. runtime path/config 관리 구현
 6. single-writer 실행 락 도입
 
-### Phase 2 — Core source ingestion
+#### Phase 2 — Core source ingestion
 
 1. Plaud collector가 `items/artifacts/segments`를 등록하게 수정
 2. Slack workspace/channel을 stream으로 등록
@@ -26,7 +28,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 7. unread/activity는 snapshot artifact로 저장
 8. late-arrival watermark 재스캔 구현
 
-### Phase 3 — Workflow queue + routing
+#### Phase 3 — Workflow queue + routing
 
 1. `daily_report`, `morning_report`, `diary`, `todo_planner`, `calendar_planner`, `gbrain_fanout` workflow 등록
 2. `workflow_segment_state` pending/claimed/processed/skipped/failed 구현
@@ -35,7 +37,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 5. claim/lease CLI 구현
 6. 처리 완료/skip/failed/retry 기록 구현
 
-### Phase 4 — Outputs, lineage, context bundles, feedback
+#### Phase 4 — Outputs, lineage, context bundles, feedback
 
 1. `context_bundles`, `context_bundle_entries` 구현
 2. `outputs`, `output_feedback`, `output_metrics` 구현
@@ -44,7 +46,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 5. report 생성 idempotency 검증
 6. output feedback/metric 기록 CLI 구현
 
-### Phase 5 — Agent enrichment / drafts / GBrain
+#### Phase 5 — Agent enrichment / drafts / GBrain
 
 1. `action_candidate`, `event_candidate`, `durable_fact_candidate`, `entity_candidate` segment 도입
 2. enricher pipeline 구현
@@ -53,7 +55,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 5. GBrain fanout은 durable_candidate/entity_candidate segment 중심으로 처리
 6. approval 기반 external side effect 실행 모델 구현
 
-### Phase 6 — Push/webhook + trigger policy
+#### Phase 6 — Push/webhook + trigger policy
 
 1. `inbound_events` 테이블 구현
 2. `continuum ingest-event` 구현
@@ -62,7 +64,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 5. Hermes webhook/cron 연동
 6. polling과 push가 같은 item/segment/routing 모델로 합류하는지 검증
 
-### Phase 7 — MCP server + host integrations
+#### Phase 7 — MCP server + host integrations
 
 1. `continuum mcp serve` 구현
 2. read tools: search/get/list pending/context bundle/lineage
@@ -71,7 +73,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 5. Hermes skill과 MCP registration UX 구현
 6. Claude/Codex 등 다른 host integration guide 작성
 
-### Phase 8 — Daemon / scheduler / watcher
+#### Phase 8 — Daemon / scheduler / watcher
 
 1. `continuum daemon` 구현
 2. local scheduler 구현
@@ -80,7 +82,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 5. daemon health/log/doctor 통합
 6. launchd/systemd user service 등록 UX 구현
 
-### Phase 9 — Advanced sync + dynamic routing
+#### Phase 9 — Advanced sync + dynamic routing
 
 1. Slack edit/delete tombstone 정교화
 2. thread summary supersede와 child sync 재처리 구현
@@ -90,7 +92,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 
 ---
 
-## 13. Core가 직접 책임지지 않는 것
+### 13. Core가 직접 책임지지 않는 것
 
 아래는 “안 한다”가 아니라 **Continuum core가 직접 책임지지 않는 것**이다.
 
@@ -103,9 +105,9 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 
 ---
 
-## 14. 성공 기준
+### 14. 성공 기준
 
-### Core success criteria
+#### Core success criteria
 
 1. Plaud/Slack/Mail/Calendar/Reminder 등 등록된 source에서 item/artifact/segment가 생성된다.
 2. 같은 외부 객체가 중복 수집되지 않는다.
@@ -123,7 +125,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 14. 새 source가 추가되어도 DB 모델을 크게 바꾸지 않는다.
 15. Hermes뿐 아니라 다른 agent도 context를 읽고 output/draft/feedback을 제출할 수 있다.
 
-### Outcome metric 예
+#### Outcome metric 예
 
 | Output | Metric |
 |---|---|
@@ -134,7 +136,7 @@ Continuum은 아래 capability를 모두 구현 대상에 포함한다. 다만 �
 
 ---
 
-## 15. 최종 요약
+### 15. 최종 요약
 
 Continuum은 개인 맥락의 SSOT다.
 

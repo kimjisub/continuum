@@ -1,15 +1,17 @@
-# Overview, Values, Philosophy, Principles
+# Product Principles
 
 > Part of the Continuum planning docs. See [planning index](README.md).
 
-# Continuum 기획서
+## Overview, Values, Philosophy, Principles
+
+## Continuum 기획서
 
 > 작업명: **Continuum**
 > 한 줄 정의: **모든 맥락을 수집하고, 누락 없이 사용자의 워크플로우에 태우는 개인 맥락 운영체제**
 
 ---
 
-## 1. 왜 Continuum인가
+### 1. 왜 Continuum인가
 
 Continuum은 사용자의 맥락이 끊기지 않고 흐르는 하나의 연속체라는 의미다.
 
@@ -26,7 +28,7 @@ Continuum은 사용자의 맥락이 끊기지 않고 흐르는 하나의 연속�
 
 ---
 
-## 2. 가치 — 왜 이 제품이 필요한가
+### 2. 가치 — 왜 이 제품이 필요한가
 
 여기서 **가치**는 구현 방식이나 설계 취향이 아니라, 사용자가 Continuum을 통해 실제로 얻게 되는 결과다.
 따라서 “SQLite를 쓴다”, “MCP를 지원한다”, “agent-neutral하다”는 가치가 아니라 그 가치를 만들기 위한 수단이다.
@@ -55,14 +57,14 @@ Continuum의 가치는 네 가지다.
 
 ---
 
-## 2.5 철학 — 무엇을 믿고 어떤 방향을 선택하는가
+### 2.5 철학 — 무엇을 믿고 어떤 방향을 선택하는가
 
 여기서 **철학**은 개별 규칙 목록이 아니라, Continuum이 반복해서 선택해야 하는 trade-off의 방향이다.
 철학은 “왜 그런 설계를 택하는가”를 설명하고, 원칙은 그 철학을 구현할 때 지킬 판단 기준이다.
 
 Continuum의 철학은 다음과 같다.
 
-### 2.5.1 맥락은 agent의 기억이 아니라 사용자의 자산이다
+#### 2.5.1 맥락은 agent의 기억이 아니라 사용자의 자산이다
 
 Continuum은 특정 agent, 특정 앱, 특정 모델의 memory가 아니다.
 사용자의 맥락은 사용자 소유의 중립 core에 남아야 하며, Hermes, Claude Code, Codex, Gemini, local script, MCP server, custom agent는 모두 그 core를 읽고 쓰는 consumer/producer일 뿐이다.
@@ -73,7 +75,7 @@ Continuum은 특정 agent, 특정 앱, 특정 모델의 memory가 아니다.
 - core는 특정 host의 prompt나 memory 기능에 종속되지 않는다.
 - CLI와 MCP는 surface일 뿐이고, 실제 판단과 상태는 공통 domain/service layer에 남는다.
 
-### 2.5.2 기록보다 해석이 먼저가 아니라, 근거 있는 해석이 먼저다
+#### 2.5.2 기록보다 해석이 먼저가 아니라, 근거 있는 해석이 먼저다
 
 Continuum은 “좋은 요약”보다 “근거를 설명할 수 있는 요약”을 우선한다.
 모든 output은 어떤 source에서 왔고, 어떤 actor와 관련 있고, 어떤 segment/context bundle을 근거로 삼았는지 설명 가능해야 한다.
@@ -84,7 +86,7 @@ Continuum은 “좋은 요약”보다 “근거를 설명할 수 있는 요약�
 - 모순된 정보는 덮어쓰지 않고 conflict로 남긴다.
 - 최신 정보가 항상 정답은 아니며, 더 강한 근거가 우선될 수 있다.
 
-### 2.5.3 자동화는 사람을 대체하기보다 승인 가능한 선택지를 만든다
+#### 2.5.3 자동화는 사람을 대체하기보다 승인 가능한 선택지를 만든다
 
 Continuum의 기본 자동화 단계는 `observe → propose/draft → approve → execute`다.
 외부 시스템에 영향을 주는 write/execute는 처음부터 완전 자동화하지 않는다.
@@ -95,7 +97,7 @@ Continuum의 기본 자동화 단계는 `observe → propose/draft → approve �
 - 충분히 검증된 낮은 위험 작업만 trusted rule로 승격한다.
 - 위험도가 높을수록 더 명시적인 승인과 더 강한 lineage가 필요하다.
 
-### 2.5.4 core는 얇고 안정적이어야 하며, 풍부함은 edge에서 나온다
+#### 2.5.4 core는 얇고 안정적이어야 하며, 풍부함은 edge에서 나온다
 
 Continuum core는 모든 제품 정책을 품은 거대한 앱이 아니다.
 core는 맥락을 수집·정규화·라우팅·추적하는 substrate이고, 실제 사용 정책은 source adapter와 workflow/application edge에서 발전한다.
@@ -106,7 +108,7 @@ core는 맥락을 수집·정규화·라우팅·추적하는 substrate이고, �
 - daily report, diary, todo planner, gbrain fanout의 제품 판단은 workflow edge가 담당한다.
 - core가 비대해지면 agent-neutral, inspectable, portable한 성격이 깨진다.
 
-### 2.5.5 로컬에서 설명 가능해야 확장도 가능하다
+#### 2.5.5 로컬에서 설명 가능해야 확장도 가능하다
 
 Continuum은 처음부터 분산 orchestration이나 외부 queue를 전제로 하지 않는다.
 먼저 local-first, inspectable, recoverable하게 만들고, 그 위에 sync/cloud/multi-device를 붙일 수 있는 구조를 유지한다.
@@ -119,18 +121,18 @@ Continuum은 처음부터 분산 orchestration이나 외부 queue를 전제로 �
 
 ---
 
-## 3. 원칙 — 설계와 구현에서 지킬 판단 기준
+### 3. 원칙 — 설계와 구현에서 지킬 판단 기준
 
 여기서 **원칙**은 철학을 실제 설계로 옮길 때 적용하는 구체적 판단 기준이다.
 원칙은 “좋은 말”이 아니라 스키마, worker, CLI/MCP, workflow 구현에서 위반 여부를 판정할 수 있어야 한다.
 
-### 3.1 데이터 모델링 원칙
+#### 3.1 데이터 모델링 원칙
 
-#### 3.1.1 Source 이름보다 data shape을 먼저 본다
+##### 3.1.1 Source 이름보다 data shape을 먼저 본다
 
 “Slack 전용”, “Plaud 전용” 모델을 만들지 않는다. 대신 source item의 **primary shape**와 **sync behavior**를 분리해 추상화한다.
 
-##### Shape는 MECE하게 정의한다
+###### Shape는 MECE하게 정의한다
 
 Shape는 source item의 “주된 의미” 기준으로 하나만 선택한다. 시간이 지나며 child가 추가되는지, 수정되는지, version이 생기는지는 shape가 아니라 `sync_behavior`로 표현한다.
 
@@ -161,7 +163,7 @@ Shape는 source item의 “주된 의미” 기준으로 하나만 선택한다.
 | CSV export | `dataset` | replace_snapshot 또는 versioned |
 | Slack unread list | `snapshot` | point_in_time |
 
-##### Sync behavior는 shape와 분리한다
+###### Sync behavior는 shape와 분리한다
 
 같은 shape라도 동기화 방식은 다를 수 있다. 반대로 다른 shape라도 같은 sync behavior를 공유할 수 있다.
 
@@ -188,24 +190,24 @@ Plaud recording = recording + extraction_pending
 
 
 
-#### 3.1.2 원본/근거는 immutable, 상태는 mutable로 분리한다
+##### 3.1.2 원본/근거는 immutable, 상태는 mutable로 분리한다
 
 - artifact/segment/output/lineage는 덮어쓰지 않는다.
 - cursor/workflow state/draft status처럼 현재 상태를 나타내는 값만 update한다.
 - 수정/재생성은 새 row와 supersede/version으로 표현한다.
 
-#### 3.1.3 출처, 신뢰도, 민감도는 처음부터 함께 저장한다
+##### 3.1.3 출처, 신뢰도, 민감도는 처음부터 함께 저장한다
 
 - provenance는 나중에 붙이는 설명이 아니라 데이터의 일부다.
 - sensitivity는 LLM 판단 이전 ingest 시점에 보수적으로 부여한다.
 - trust와 sensitivity는 분리한다. 믿을 만한 정보라도 민감할 수 있고, 공개 정보라도 신뢰도가 낮을 수 있다.
 
-#### 3.1.4 derived output은 기본적으로 다시 routing input이 아니다
+##### 3.1.4 derived output은 기본적으로 다시 routing input이 아니다
 
 - report/diary/todo proposal이 다시 입력으로 순환하면 맥락 오염과 중복 판단이 생긴다.
 - output을 재입력으로 쓰려면 명시적 workflow rule과 lineage가 필요하다.
 
-### 3.2 처리/운영 원칙
+#### 3.2 처리/운영 원칙
 
 1. **Deterministic-first**
    - cursor, dedupe, hash, schema migration, status update, routing materialization처럼 결정론적으로 가능한 일은 deterministic worker가 한다.
@@ -233,7 +235,7 @@ Plaud recording = recording + extraction_pending
    - accepted/rejected/edited/executed/time_to_approval 같은 값은 사용자 체감 품질 metric이다.
    - 둘 중 하나만 있으면 시스템 품질을 착각한다.
 
-### 3.3 인터페이스/확장 원칙
+#### 3.3 인터페이스/확장 원칙
 
 1. **Core logic은 CLI/MCP 밖에 둔다**
    - CLI와 MCP는 같은 service/domain layer를 호출한다.
@@ -249,7 +251,7 @@ Plaud recording = recording + extraction_pending
    - input contract, output contract, required capability, safety policy, guide를 포함한다.
    - Hermes, Claude Code, Codex, MCP client, local script가 같은 workflow package를 각자 실행할 수 있어야 한다.
 
-### 3.4 구현 범위 원칙
+#### 3.4 구현 범위 원칙
 
 Continuum은 MVP로 작게 끝내는 제품이 아니라, 아래 capability를 모두 구현해야 하는 장기 제품이다. 다만 구현은 위험도가 낮은 순서로 나누고, 각 phase는 다음 phase를 막지 않는 안정적인 기반을 남겨야 한다.
 
@@ -263,7 +265,7 @@ Continuum은 MVP로 작게 끝내는 제품이 아니라, 아래 capability를 �
 8. **Unrouted is visible** — routing되지 않은 segment는 audit 대상이다.
 9. **Proposal before side effect** — 외부 write/execute는 proposal/draft와 approval state를 거친다.
 
-### 3.5 원칙 위배 체크리스트
+#### 3.5 원칙 위배 체크리스트
 
 새 기능/스키마/worker를 추가할 때마다 아래 질문에 답한다.
 

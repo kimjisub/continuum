@@ -1,10 +1,336 @@
-# Entity Reference and Mutability
+# Reference: ERD and Entity Rules
 
 > Part of the Continuum planning docs. See [planning index](README.md).
 
-## 17. 엔티티/관계 해설
+## ERD
 
-### 17.1 이름 정리
+### 16. ERD
+
+```mermaid
+erDiagram
+    STREAMS ||--o{ STREAM_CURSORS : tracks_collection_position
+    STREAMS ||--o{ ITEMS : emits
+    ITEMS ||--o{ ITEM_SYNC_STATE : tracks_aggregate_sync
+    ITEMS ||--o{ ITEM_ACTOR_LINKS : involves
+    SOURCE_ACTORS ||--o{ ITEM_ACTOR_LINKS : participates_as
+    ITEMS ||--o{ EVIDENCE_TRUST_ASSESSMENTS : can_be_assessed
+    SEGMENTS ||--o{ EVIDENCE_TRUST_ASSESSMENTS : can_be_assessed
+    OUTPUTS ||--o{ EVIDENCE_TRUST_ASSESSMENTS : can_be_assessed
+    EVIDENCE_CONFLICTS }o--|| SEGMENTS : may_reference
+    ITEMS ||--o{ ARTIFACTS : stores_files
+    ITEMS ||--o{ SEGMENTS : decomposes_into
+    SEGMENTS ||--o| SEGMENTS : supersedes
+
+    WORKFLOWS ||--o{ WORKFLOW_SEGMENT_STATE : owns_queue_state
+    SEGMENTS ||--o{ WORKFLOW_SEGMENT_STATE : queued_for
+    RUNS ||--o{ WORKFLOW_SEGMENT_STATE : last_updated_by
+
+    RUNS ||--o{ RUN_INPUTS : declares_inputs
+    WORKFLOWS ||--o{ WORKFLOW_PACKAGES : may_use_package
+    WORKFLOWS ||--o{ CONTEXT_BUNDLES : builds
+    CONTEXT_BUNDLES ||--o{ CONTEXT_BUNDLE_ENTRIES : contains
+    STREAMS ||--o{ RUN_INPUTS : may_be_input
+    ITEMS ||--o{ RUN_INPUTS : may_be_input
+    ARTIFACTS ||--o{ RUN_INPUTS : may_be_input
+    SEGMENTS ||--o{ RUN_INPUTS : may_be_input
+    WORKFLOWS ||--o{ RUN_INPUTS : may_be_input
+
+    RUNS ||--o{ OUTPUTS : creates
+    CONTEXT_BUNDLES ||--o{ OUTPUTS : packages_input_for
+    OUTPUTS ||--o{ OUTPUT_FEEDBACK : receives
+    OUTPUTS ||--o{ OUTPUT_METRICS : measures
+    OUTPUTS ||--o{ LINEAGE : cites
+    SEGMENTS ||--o{ LINEAGE : supports
+
+    OUTPUTS ||--o| DRAFTS : specialized_as
+    DRAFTS ||--o{ DRAFT_VERSIONS : has_immutable_versions
+
+    SCHEMA_MIGRATIONS {
+      integer version PK
+      text name
+      text applied_at
+    }
+
+    STREAMS {
+      integer id PK
+      text key UK
+      text connector
+      text shape
+      text display_name
+      text metadata_json
+      text created_at
+      text updated_at
+    }
+
+    STREAM_CURSORS {
+      integer stream_id PK,FK
+      text cursor_key PK
+      text cursor_value
+      text updated_at
+    }
+
+    ITEMS {
+      integer id PK
+      integer stream_id FK
+      text external_id
+      text item_type
+      text title
+      text occurred_at
+      text collected_at
+      text updated_at
+      text content_hash
+      text status
+      text raw_path
+      text metadata_json
+    }
+
+    ITEM_SYNC_STATE {
+      integer item_id PK,FK
+      text sync_kind PK
+      text cursor_value
+      integer count_seen
+      text latest_child_external_id
+      text latest_child_occurred_at
+      text last_checked_at
+      text last_full_sync_at
+      text stale_after
+      text metadata_json
+      text updated_at
+    }
+
+    SOURCE_ACTORS {
+      integer id PK
+      text source_system
+      text external_actor_id
+      text display_name
+      text handle
+      text email
+      text metadata_json
+      text created_at
+      text updated_at
+    }
+
+    ITEM_ACTOR_LINKS {
+      integer item_id PK,FK
+      integer actor_id PK,FK
+      text role PK
+      text created_at
+    }
+
+    EVIDENCE_TRUST_ASSESSMENTS {
+      integer id PK
+      text target_type
+      integer target_id
+      text assessment_phase
+      real trust_score
+      text trust_level
+      text basis
+      text assessed_by
+      integer run_id FK
+      text note
+      text created_at
+    }
+
+    EVIDENCE_CONFLICTS {
+      integer id PK
+      text left_type
+      integer left_id
+      text right_type
+      integer right_id
+      text conflict_type
+      text resolution_status
+      text preferred_type
+      integer preferred_id
+      text reason
+      text created_at
+      text resolved_at
+    }
+
+    ARTIFACTS {
+      integer id PK
+      integer item_id FK
+      text kind
+      text path
+      text mime_type
+      text content_hash
+      integer size_bytes
+      text created_at
+      text metadata_json
+    }
+
+    SEGMENTS {
+      integer id PK
+      integer item_id FK
+      integer supersedes_segment_id FK
+      integer superseded_by_segment_id FK
+      text segment_type
+      integer ordinal
+      text text_path
+      text text_hash
+      text occurred_at
+      real confidence
+      text sensitivity
+      text metadata_json
+      text created_at
+    }
+
+    WORKFLOWS {
+      integer id PK
+      text key UK
+      text display_name
+      text mode
+      text trigger_policy_json
+      text created_at
+      text updated_at
+    }
+
+    WORKFLOW_PACKAGES {
+      integer id PK
+      text key
+      text version
+      text package_path
+      text input_contract_json
+      text output_contract_json
+      text required_capabilities_json
+      text safety_policy_json
+      text guide_path
+      text created_at
+      text updated_at
+    }
+
+    WORKFLOW_SEGMENT_STATE {
+      integer workflow_id PK,FK
+      integer segment_id PK,FK
+      text status
+      text reason
+      text claim_owner
+      text claim_expires_at
+      text processed_at
+      integer run_id FK
+      integer attempt_count
+      text next_attempt_at
+      text error
+    }
+
+    RUNS {
+      integer id PK
+      text run_type
+      text key
+      text scope_key
+      text input_segment_set_hash
+      text status
+      text started_at
+      text finished_at
+      text input_json
+      text output_path
+      text error
+      text metadata_json
+    }
+
+    RUN_INPUTS {
+      integer run_id FK
+      text input_type
+      integer input_id
+      text input_key
+      text role
+      text created_at
+    }
+
+    CONTEXT_BUNDLES {
+      integer id PK
+      integer workflow_id FK
+      integer run_id FK
+      text purpose
+      text title
+      text selection_policy
+      text trust_policy_json
+      text sensitivity_policy_json
+      text created_at
+      text metadata_json
+    }
+
+    CONTEXT_BUNDLE_ENTRIES {
+      integer bundle_id PK,FK
+      text entry_type PK
+      integer entry_id PK
+      text role PK
+      integer rank
+      text created_at
+    }
+
+    OUTPUTS {
+      integer id PK
+      integer run_id FK
+      integer context_bundle_id FK
+      text output_kind
+      text output_ref
+      text path
+      text created_at
+      text metadata_json
+    }
+
+    OUTPUT_FEEDBACK {
+      integer id PK
+      integer output_id FK
+      text feedback_type
+      text value
+      text actor
+      text created_at
+      text metadata_json
+    }
+
+    OUTPUT_METRICS {
+      integer id PK
+      integer output_id FK
+      text metric_key
+      real metric_value
+      text unit
+      text measured_at
+      text metadata_json
+    }
+
+    LINEAGE {
+      integer id PK
+      integer output_id FK
+      integer segment_id FK
+      text relation
+      text created_at
+    }
+
+    DRAFTS {
+      integer id PK
+      integer output_id FK
+      text draft_type
+      text format
+      text title
+      text path
+      text status
+      text target_ref
+      text created_at
+      text updated_at
+      text metadata_json
+    }
+
+    DRAFT_VERSIONS {
+      integer id PK
+      integer draft_id FK
+      integer version
+      text path
+      text content_hash
+      text created_at
+      text created_by
+      text change_note
+    }
+```
+---
+
+---
+
+## Entity Reference and Mutability
+
+### 17. 엔티티/관계 해설
+
+#### 17.1 이름 정리
 
 | 엔티티 | 더 쉬운 말 | 왜 이 이름인가 |
 |---|---|---|
@@ -33,7 +359,7 @@
 | `draft_versions` | 초안 내용 버전 | 초안 본문의 immutable version들 |
 | `schema_migrations` | DB 버전표 | 스키마 변경 이력 |
 
-### 17.2 관계 해석
+#### 17.2 관계 해석
 
 ```text
 streams → items → artifacts/segments
@@ -100,7 +426,7 @@ outputs → drafts → draft_versions
 - draft row는 승인/폐기/실행 상태를 가진 논리적 초안이다.
 - 실제 내용은 draft_versions에 immutable하게 쌓인다.
 
-### 17.3 헷갈리기 쉬운 구분
+#### 17.3 헷갈리기 쉬운 구분
 
 | 헷갈리는 쌍 | 차이 |
 |---|---|
@@ -112,7 +438,7 @@ outputs → drafts → draft_versions
 | `output` vs `lineage` | output은 결과물, lineage는 근거 연결 |
 | `draft` vs `draft_version` | draft는 상태, draft_version은 내용 |
 
-### 17.4 이름 변경 결정
+#### 17.4 이름 변경 결정
 
 초기 ERD의 `CONNECTOR_CURSORS`는 어색하므로 `STREAM_CURSORS`로 바꾼다.
 
@@ -127,11 +453,11 @@ cursor = stream별 수집 위치
 따라서 cursor의 소유자는 connector가 아니라 stream이다.
 ---
 
-## 18. 엔티티별 변경 가능성 규칙
+### 18. 엔티티별 변경 가능성 규칙
 
 Continuum은 모든 테이블을 append-only로 만들지는 않는다. 대신 **원본성/근거성/감사성이 필요한 데이터는 immutable 또는 append-only**로 두고, **운영 상태는 update 가능**하게 둔다.
 
-### 18.1 변경 가능성 용어
+#### 18.1 변경 가능성 용어
 
 | 용어 | 의미 |
 |---|---|
@@ -140,7 +466,7 @@ Continuum은 모든 테이블을 append-only로 만들지는 않는다. 대신 *
 | Mutable state | 현재 상태를 나타내므로 update 가능하다. 단, 필요하면 run/log로 이력을 남긴다. |
 | Soft delete | 삭제하지 않고 status/tombstone으로 삭제 사실을 표시한다. |
 
-### 18.2 엔티티별 정책
+#### 18.2 엔티티별 정책
 
 | 엔티티 | 정책 | 이유 | 변경 방식 |
 |---|---|---|---|
@@ -169,9 +495,9 @@ Continuum은 모든 테이블을 append-only로 만들지는 않는다. 대신 *
 | `draft_versions` | Append-only + immutable | 초안 내용 버전 이력 | 수정 시 새 version insert |
 | `schema_migrations` | Append-only | DB 변경 이력 | migration 적용 시 insert |
 
-### 18.3 핵심 규칙
+#### 18.3 핵심 규칙
 
-#### 원본/근거 계층은 immutable
+##### 원본/근거 계층은 immutable
 
 ```text
 artifacts
@@ -181,7 +507,7 @@ outputs
 
 이 셋은 덮어쓰지 않는다. 바뀌면 새 row를 만든다.
 
-#### 이력 계층은 append-only
+##### 이력 계층은 append-only
 
 ```text
 runs
@@ -193,7 +519,7 @@ schema_migrations
 
 이 테이블들은 감사/추적을 위해 기존 row를 수정하지 않는다.
 
-#### 상태 계층은 mutable
+##### 상태 계층은 mutable
 
 ```text
 stream_cursors
@@ -203,7 +529,7 @@ drafts
 
 이 테이블들은 현재 상태를 나타내므로 update가 자연스럽다.
 
-#### 외부 객체 계층은 soft-mutable
+##### 외부 객체 계층은 soft-mutable
 
 ```text
 items
@@ -211,9 +537,9 @@ items
 
 외부 시스템의 메시지/메일/이벤트는 수정/삭제될 수 있다. 따라서 item 자체는 현재 상태를 반영할 수 있지만, 그로부터 만들어진 artifact/segment는 immutable하게 새로 만든다.
 
-### 18.4 예시
+#### 18.4 예시
 
-#### Slack 메시지가 수정된 경우
+##### Slack 메시지가 수정된 경우
 
 ```text
 items
@@ -230,7 +556,7 @@ workflow_segment_state
   새 segment에 대해 workflow별 pending 생성
 ```
 
-#### Draft를 수정한 경우
+##### Draft를 수정한 경우
 
 ```text
 drafts
@@ -241,7 +567,7 @@ draft_versions
   version 2 append
 ```
 
-#### Daily report를 다시 생성한 경우
+##### Daily report를 다시 생성한 경우
 
 ```text
 runs
